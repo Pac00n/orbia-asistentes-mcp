@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Define consistent CSS variables for both light and dark modes */
+:root {
+  /* Using common light theme HSL values */
+  /* Adjusted for better light mode contrast */
+  --background: 210 40% 98%; /* Off-white / Very Light Gray-Blue */
+  --foreground: 222.2 47.4% 11.2%; /* Dark Gray (Good) */
+  --card: 0 0% 100%; /* White cards to contrast with off-white background */
+  --card-foreground: 222.2 47.4% 11.2%; /* Dark Gray text on cards */
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 47.4% 11.2%;
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 88%; /* Slightly darker border for cards */
+  --input: 214.3 31.8% 88%; /* Consistent with border */
+  --ring: 215 20.2% 65.1%;
+  --radius: 0.9rem;
+}
+
+.dark {
+  /* Using common dark theme HSL values */
+  --background: 222.2 47.4% 5%; /* Very Dark Blue/Gray */
+  --foreground: 210 40% 98%; /* Almost White */
+  --card: 222.2 47.4% 7%; /* Slightly lighter dark */
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 47.4% 5%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 222.2 47.4% 11.2%; /* Dark Gray */
+  --secondary: 217.2 32.6% 17.5%; /* Darker Gray/Blue */
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%; /* Mid Gray */
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%; /* Darker Red */
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%; /* Dark Border */
+  --input: 217.2 32.6% 17.5%;
+  --ring: 217.2 32.6% 17.5%; /* Ring color */
+  
+  /* Variables para el texto en modo oscuro */
+  --text-primary: 255, 255, 255; /* Blanco puro */
+  --text-opacity: 1; /* Opacidad completa */
+  /* --radius is inherited from :root */
+}
+
+* {
+  @apply border-border;
+  transition: background 0.3s, box-shadow 0.3s, border 0.3s, color 0.2s;
+  box-sizing: border-box;
+}
+
+body {
+  @apply bg-background text-foreground;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  font-family: 'Inter', 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+  min-height: 100vh;
+}
+
+/* Typing animation */
+.typing-dot {
+  @apply w-2 h-2 rounded-full;
+  animation: typing 1.4s infinite both;
+}
+
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Fade in animation for messages */
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Textarea autoresize */
+textarea {
+  overflow-y: hidden;
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-violet-500 to-indigo-600;
+}
+
+/* Estilos para asegurar que el texto en los globos de chat sea completamente opaco */
+.chat-message p,
+.chat-message div,
+.chat-message span {
+  color: rgb(255, 255, 255) !important;
+  opacity: 1 !important;
+  --tw-text-opacity: 1 !important;
+}
+
+/* Estilos específicos para los mensajes del asistente */
+.bg-gradient-to-br + .whitespace-pre-wrap * {
+  color: rgb(255, 255, 255) !important;
+  opacity: 1 !important;
+}
+
+/* Asegurar que el texto en los mensajes del sistema también sea visible */
+.bg-gray-700\/50 {
+  color: rgb(255, 255, 255) !important;
+  opacity: 1 !important;
+}
+
+/* Estilos para el contenedor de mensajes */
+.max-w-\[80\%\], .md\:max-w-\[70\%\] {
+  --tw-text-opacity: 1 !important;
+}
+
+/* Asegurar que el texto en los mensajes sea blanco */
+.text-white {
+  --tw-text-opacity: 1 !important;
+  color: rgb(255 255 255 / var(--tw-text-opacity)) !important;
+}
+
+/* Asegurar que el texto en los mensajes del sistema sea visible */
+.text-gray-400 {
+  --tw-text-opacity: 1 !important;
+  color: rgb(255 255 255 / var(--tw-text-opacity)) !important;
+}

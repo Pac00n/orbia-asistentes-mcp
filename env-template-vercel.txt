@@ -1,0 +1,30 @@
+# Variables de entorno para despliegue en Vercel
+# Copia estas variables al panel de Vercel: Settings → Environment Variables
+
+# OpenAI API key
+OPENAI_API_KEY=tu-clave-api-de-openai-aqui
+
+# MCP v4 Servers Configuration - Configuración para servidores externos reales
+MCP_SERVERS_CONFIG='[
+  {
+    "id": "fs-demo",
+    "url": "https://fs-demo.mcpservers.org/mcp",
+    "name": "MCP FS Demo"
+  },
+  {
+    "id": "git",
+    "url": "https://git.mcpservers.org/mcp",
+    "name": "Git Mirror ReadOnly"
+  },
+  {
+    "id": "fetch",
+    "url": "https://demo.mcp.tools/fetch/mcp",
+    "name": "Fetch Tool"
+  }
+]'
+
+# Forzar uso de conexiones reales (sin simulación)
+MCP_FORCE_REAL=true
+
+# Otras variables necesarias
+NEXT_PUBLIC_MCP_SERVER_URL=https://fs-demo.mcpservers.org/mcp

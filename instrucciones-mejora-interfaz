@@ -1,0 +1,92 @@
+¡De acuerdo! Aquí tienes un conjunto de instrucciones paso a paso, diseñadas para que se las proporciones directamente a una IA asistente de codificación (como GitHub Copilot Chat, Codeium Chat, ChatGPT con capacidades de código, etc.) para que realice las modificaciones necesarias en tu proyecto `asistentes-ia-v02` y mejore la interfaz visual.
+
+---
+
+**Prompt General para la IA Asistente:**
+
+"Hola IA, necesito tu ayuda para refactorizar y mejorar estéticamente mi proyecto Next.js llamado `asistentes-ia-v02`. Utiliza **Next.js (App Router)**, **TypeScript** y **Tailwind CSS**. El objetivo es transformar la interfaz actual, que es muy básica, en una más atractiva, moderna y profesional.
+
+Por favor, sigue estas instrucciones paso a paso, modificando los archivos indicados. **Realiza los cambios de forma incremental**, asegurándote de preservar la funcionalidad existente. **Es crucial que solo modifiques los aspectos visuales y de estilo** usando clases de Tailwind CSS.
+
+**Instrucción Preliminar:** Antes de empezar, asegúrate de tener acceso al contexto del proyecto `asistentes-ia-v02`.
+
+**Instrucciones Paso a Paso:**
+
+**Paso 1: Configurar Paleta de Colores Base**
+*   **Archivo:** `tailwind.config.ts`
+*   **Acción:** Dentro de `theme.extend.colors`, define un color primario. Usa el siguiente azul como ejemplo (o sugiere una alternativa profesional si lo prefieres), asegurándote de incluir todas las tonalidades (50-950). Además, considera configurar `gray` para usar un gris neutro como `zinc` o `neutral`.
+
+    ```typescript
+    // Ejemplo para theme.extend.colors:
+    primary: {
+      '50': '#eff6ff', '100': '#dbeafe', '200': '#bfdbfe', '300': '#93c5fd', '400': '#60a5fa', '500': '#3b82f6', '600': '#2563eb', '700': '#1d4ed8', '800': '#1e40af', '900': '#1e3a8a', '950': '#172554'
+    },
+    gray: require('tailwindcss/colors').zinc // O 'neutral'
+    ```
+
+**Paso 2: Establecer Tipografía Base**
+*   **Archivo:** `src/app/layout.tsx`
+*   **Acción:**
+    1.  Importa una fuente moderna sans-serif desde `next/font/google` (ej. `Inter` o `Poppins`).
+    2.  Aplica la clase de la fuente importada y un color de texto base oscuro (ej. `text-gray-800` o `text-zinc-800`) a la etiqueta `<body>`.
+    3.  Asegúrate de que el fondo base del `<body>` sea blanco o un gris muy claro (ej. `bg-white` o `bg-gray-50`).
+
+**Paso 3: Aplicar Layout General Consistente**
+*   **Archivos:** `src/app/page.tsx`, `src/app/assistants/page.tsx`, `src/app/assistant/[assistantId]/page.tsx`
+*   **Acción:** En cada uno de estos archivos de página, localiza el contenedor principal que envuelve el contenido específico de la página (después del Header y antes del Footer, si existen). Aplícale las siguientes clases para centrar, limitar ancho y añadir padding: `max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12`.
+
+**Paso 4: Estilizar las Tarjetas de Asistente**
+*   **Archivo:** `src/components/AssistantCard.tsx` (o el nombre que tenga tu componente de tarjeta)
+*   **Acción:** Modifica el elemento raíz del componente `AssistantCard`. Aplícale las siguientes clases para mejorar su apariencia: `bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 p-5 hover:shadow-lg transition-shadow duration-200 ease-in-out`.
+
+**Paso 5: Organizar Lista de Asistentes en Cuadrícula**
+*   **Archivo:** `src/app/assistants/page.tsx`
+*   **Acción:** Localiza el elemento que envuelve el mapeo/renderizado de las `AssistantCard`. Aplícale las siguientes clases para crear una cuadrícula responsiva: `grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3`.
+
+**Paso 6: Estilizar Burbujas de Chat**
+*   **Archivo:** `src/components/ChatInterface.tsx` (o el nombre que tenga tu componente de chat)
+*   **Acción:** Dentro del mapeo de mensajes (`messages.map(...)`), aplica estilos condicionales:
+    *   **Contenedor de Mensaje:** Usa `flex mb-4`. Añade `justify-end` si `message.role === 'user'`.
+    *   **Burbuja Real:**
+        *   **Usuario (`user`):** Aplica `bg-primary-500 text-white rounded-lg py-2 px-4 max-w-xs lg:max-w-md shadow-sm`.
+        *   **Asistente (`assistant`):** Aplica `bg-gray-100 text-gray-800 rounded-lg py-2 px-4 max-w-xs lg:max-w-md shadow-sm border border-gray-200`.
+
+**Paso 7: Mejorar Área de Input del Chat**
+*   **Archivo:** `src/components/ChatInterface.tsx`
+*   **Acción:** Localiza el `div` que contiene el `input` y el `button`.
+    1.  Al `div` contenedor: Aplica `flex items-center space-x-2 p-4 border-t border-gray-200 bg-white`.
+    2.  Al `input`: Aplica `flex-grow border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent disabled:opacity-50`.
+    3.  Al `button`: Aplica `bg-primary-500 text-white rounded-md px-4 py-2 font-semibold hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`. Considera añadir un icono de "Enviar".
+
+**Paso 8: Implementar Indicador de Carga en Chat**
+*   **Archivo:** `src/components/ChatInterface.tsx`
+*   **Acción:**
+    1.  Asegúrate que las propiedades `disabled={isLoading}` se aplican correctamente al `input` y al `button` (las clases `disabled:*` del paso anterior se encargarán del estilo).
+    2.  Justo encima o debajo del área de input, añade un pequeño elemento que se muestre condicionalmente cuando `isLoading` es `true`. Por ejemplo: `<div className="text-sm text-gray-500 px-4">{isLoading ? 'Asistente está pensando...' : ''}</div>` (estilízalo como prefieras, quizás con un spinner SVG).
+
+**Paso 9: Refinar Landing Page (Hero Section)**
+*   **Archivo:** `src/app/page.tsx`
+*   **Acción:** Modifica la sección superior (Hero Section).
+    1.  Aplica un padding vertical generoso al contenedor de la sección (ej. `py-20 sm:py-28`).
+    2.  Asegura que el título principal (`h1`) sea grande y llamativo (ej. `text-4xl sm:text-5xl font-bold tracking-tight text-gray-900`).
+    3.  Asegura que el subtítulo (`p`) sea claro y con un color de contraste adecuado (ej. `mt-4 text-lg text-gray-600`).
+    4.  Asegura que el botón CTA principal use los estilos primarios definidos (ej. `mt-6 bg-primary-500 ...`).
+    5.  (Opcional) Considera añadir un fondo sutil (gradiente suave o imagen de fondo) a esta sección.
+
+**Paso 10: Revisión Final de Consistencia y Pulido**
+*   **Archivos:** Varios (revisar `Header.tsx`, `Footer.tsx`, botones y enlaces en general).
+*   **Acción:** Revisa la aplicación en busca de inconsistencias. Asegúrate de que:
+    *   Todos los botones importantes usen los estilos primarios.
+    *   Los enlaces tengan un color claro y un efecto `hover:` (ej. `text-primary-600 hover:text-primary-700 hover:underline`).
+    *   La redondez (`rounded-md`/`rounded-lg`) y las sombras (`shadow-sm`/`shadow-md`) se usen de forma coherente.
+    *   Se apliquen transiciones suaves (`transition duration-150`) a los elementos interactivos con efectos hover.
+
+**Instrucción Final:** Una vez completados todos los pasos, informa que has terminado. Estaré revisando los cambios."
+
+---
+
+**Notas para ti al usar este prompt:**
+
+*   **Claridad:** Este prompt es muy detallado para minimizar la ambigüedad para la IA.
+*   **Iteración:** Aunque le pidas que lo haga todo, es posible que necesites revisar y pedir correcciones específicas si la IA malinterpreta algo o el resultado no es exactamente el esperado.
+*   **Control:** Mantén tu servidor de desarrollo (`npm run dev`) corriendo para ver los cambios que la IA va aplicando (si su integración lo permite) o aplícalos tú mismo y refresca.

@@ -1,0 +1,4 @@
+nogoogle-generativeai
+Flask
+Flask-Cors
+python-dotenv

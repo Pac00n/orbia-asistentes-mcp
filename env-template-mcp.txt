@@ -1,0 +1,93 @@
+# Plantilla de variables de entorno para desarrollo local y simulación MCP
+# Copia y pega estas configuraciones en tu archivo .env.local
+
+# Configuración OpenAI (reemplaza con tu clave real)
+NEXT_PUBLIC_OPENAI_API_KEY=tu-clave-api-de-openai-aqui
+OPENAI_API_KEY=tu-clave-api-de-openai-aqui
+NEXT_PUBLIC_OPENAI_ASSISTANT_ID=tu-id-de-asistente-aqui
+OPENAI_ASSISTANT_ID=tu-id-de-asistente-aqui
+
+# MCP Configuration (básico)
+MCP_SERVER_URL=http://localhost:3001
+NEXT_PUBLIC_MCP_SERVER_URL=http://localhost:3001
+
+# MCP v4 Servers Configuration - Configuración optimizada para simulación local
+MCP_SERVERS_CONFIG='[
+  {
+    "id": "srv1",
+    "url": "http://simulated.server",
+    "name": "Servidor Simulado 1 (Calculadora y Clima)"
+  },
+  {
+    "id": "toolCo",
+    "url": "http://simulated.toolserver",
+    "name": "Tool Company Simulada (Búsqueda e Imágenes)"
+  },
+  {
+    "id": "brave-search",
+    "url": "https://brave-search.mcpservers.org/mcp",
+    "name": "Brave Search Simulado"
+  },
+  {
+    "id": "exa-local",
+    "url": "https://exa-search.mcpservers.org/mcp",
+    "name": "Exa Search Simulado"
+  }
+]'
+
+# MCP v4 Servers Configuration - Servidores reales (comentados para referencia futura)
+# MCP_SERVERS_CONFIG='[
+#   {
+#     "id": "firebase",
+#     "url": "https://mcp.firebase.dev",
+#     "name": "Firebase MCP Server",
+#     "auth": {
+#       "type": "bearer",
+#       "token": "TU_TOKEN_DE_FIREBASE"
+#     }
+#   },
+#   {
+#     "id": "github",
+#     "url": "https://mcp.github.dev",
+#     "name": "GitHub MCP Server",
+#     "auth": {
+#       "type": "bearer",
+#       "token": "TU_TOKEN_DE_GITHUB"
+#     }
+#   },
+#   {
+#     "id": "brave",
+#     "url": "https://brave-search.mcpservers.org/mcp",
+#     "name": "Brave Search MCP",
+#     "auth": {
+#       "type": "bearer",
+#       "token": "TU_TOKEN_DE_BRAVE_SEARCH"
+#     }
+#   },
+#   {
+#     "id": "exa",
+#     "url": "https://exa-search.mcpservers.org/mcp",
+#     "name": "Exa Search MCP",
+#     "auth": {
+#       "type": "bearer",
+#       "token": "TU_TOKEN_DE_EXA_SEARCH"
+#     }
+#   },
+#   {
+#     "id": "fs-demo",
+#     "url": "https://fs-demo.mcpservers.org/mcp",
+#     "name": "MCP FS Demo"
+#   }
+# ]'
+
+# Opcional: Permitir simulación (cambiar a false para solucionar problemas de conexión)
+MCP_FORCE_REAL=false
+
+# Supabase (si estás usando Supabase para la configuración de MCP)
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
+
+# Notas:
+# 1. Reemplaza "TU_TOKEN_DE_X" con los tokens reales que obtengas para cada servicio
+# 2. fs-demo es un servidor de demostración que no requiere autenticación
+# 3. Puedes comentar o eliminar los servidores que no vayas a utilizar
