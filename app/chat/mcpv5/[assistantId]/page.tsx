@@ -169,16 +169,16 @@ export default function ChatPage() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <h1 className="text-xl font-semibold">MCP v5 - {assistantId}</h1>
-            <button
-              onClick={() => setShowTools(!showTools)}
-              className="flex items-center p-2 rounded hover:bg-gray-700 transition-colors"
-              title="Herramientas disponibles"
-            >
-              <Hammer className="w-5 h-5 mr-2" />
-              <span>{availableTools.length}</span>
-              {showTools ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
-            </button>
           </div>
+          <button
+            onClick={() => setShowTools(!showTools)}
+            className="flex items-center p-2 rounded hover:bg-gray-700 transition-colors"
+            title="Herramientas disponibles"
+          >
+            <Hammer className="w-5 h-5 mr-2" />
+            <span>{availableTools.length}</span>
+            {showTools ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+          </button>
         </div>
         
         {/* Desplegable de herramientas */}
