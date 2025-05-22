@@ -13,6 +13,7 @@ interface AssistantCardInfo {
   icon: React.ReactNode;
   href: string;
   color: string;
+  toolCount?: number; // Número de herramientas disponibles
 }
 
 // Lista de asistentes para las tarjetas (solo versiones con Nueva UI)
@@ -31,7 +32,8 @@ const assistantCards: AssistantCardInfo[] = [
     description: "Asistente avanzado con herramientas locales y nueva interfaz.",
     icon: <Hammer className="w-8 h-8 text-rose-400" />,
     href: "/chat-v3/mcp-v3",
-    color: "from-rose-500 to-pink-600"
+    color: "from-rose-500 to-pink-600",
+    toolCount: 3
   },
   {
     id: "mcp-v4",
@@ -39,7 +41,17 @@ const assistantCards: AssistantCardInfo[] = [
     description: "Asistente con herramientas externas MCP para funcionalidades avanzadas.",
     icon: <Globe className="w-8 h-8 text-blue-400" />,
     href: "/chat/mcpv4/mcp-v4-tools",
-    color: "from-blue-500 to-indigo-600"
+    color: "from-blue-500 to-indigo-600",
+    toolCount: 5
+  },
+  {
+    id: "mcp-v5",
+    title: "MCP v5",
+    description: "Asistente con integración completa de servidores MCP externos (Zapier, Activepieces, Brave Search).",
+    icon: <Hammer className="w-8 h-8 text-emerald-400" />,
+    href: "/chat/mcpv5/mcp-v5-tools",
+    color: "from-emerald-500 to-teal-600",
+    toolCount: 12 // Número estimado de herramientas disponibles
   }
 ];
 
@@ -183,8 +195,13 @@ export default function AssistantsPage() {
               <Link href={assistant.href} className="block h-full">
                 <div className={`h-full bg-gradient-to-br ${assistant.color}/10 to-gray-900/50 border border-gray-700/50 rounded-2xl p-6 hover:border-orange-400/30 transition-all duration-300 hover:shadow-lg hover:shadow-orange-500/10 backdrop-blur-sm group-hover:-translate-y-1`}>
                   <div className="flex items-start space-x-4">
-                    <div className={`p-3 rounded-xl bg-gradient-to-br ${assistant.color}/30`}>
+                    <div className={`p-3 rounded-xl bg-gradient-to-br ${assistant.color}/30 relative`}>
                       {assistant.icon}
+                      {assistant.toolCount && (
+                        <div className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                          {assistant.toolCount}
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1">
                       <h3 className="text-xl font-semibold text-white mb-1">{assistant.title}</h3>
