@@ -1,30 +1,42 @@
-# Openai chat integration
+# Plataforma de Asistentes IA con Integración MCP
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/pac0ns-projects/orbia-asistentes-mcp)
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/pac0ns-projects/v0-openai-chat-integration)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/pYtnwg5tmpe)
+## Descripción
 
-## Overview
+Este proyecto integra el Protocolo de Contexto de Modelo (MCP) para proporcionar herramientas avanzadas a los asistentes de IA. La integración permite que los modelos de lenguaje accedan a funciones externas como búsqueda web, procesamiento de imágenes y más.
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+## Características
 
-## Deployment
+- Integración completa con MCP (Model Context Protocol)
+- Soporte para múltiples servidores MCP
+- Modo de simulación para desarrollo local
+- Despliegue optimizado para Vercel
+- Interfaz de usuario moderna y responsiva
 
-Your project is live at:
+## Configuración Local
 
-**[https://vercel.com/pac0ns-projects/v0-openai-chat-integration](https://vercel.com/pac0ns-projects/v0-openai-chat-integration)**
+```bash
+# Instalar dependencias
+npm install
 
-## Build your app
+# Configurar variables de entorno
+# Copiar .env.local.example a .env.local y configurar
 
-Continue building your app on:
+# Iniciar servidor de desarrollo
+npm run dev
+```
 
-**[https://v0.dev/chat/projects/pYtnwg5tmpe](https://v0.dev/chat/projects/pYtnwg5tmpe)**
+## Despliegue en Vercel
 
-## How It Works
+Para desplegar en producción, configure las siguientes variables de entorno en Vercel:
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+```
+OPENAI_API_KEY=su_clave_api_real
+MCP_FORCE_REAL=true
+MCP_SERVERS_CONFIG=[{"id":"fs-demo","url":"https://fs-demo.mcpservers.org/mcp","name":"MCP FS Demo"},{"id":"git","url":"https://git.mcpservers.org/mcp","name":"Git Mirror ReadOnly"},{"id":"fetch","url":"https://demo.mcp.tools/fetch/mcp","name":"Fetch Tool"}]
+```
+
+## Documentación
+
+Consulte la carpeta `docs/implementacion-mcp-mayo2025/` para obtener documentación detallada sobre la implementación y configuración.
