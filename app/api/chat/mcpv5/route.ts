@@ -219,7 +219,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message } = body;
+    // Add forced_tool_id to the destructured body
+    const { message, forced_tool_id } = body;
     
     if (!message) {
       return NextResponse.json({
@@ -242,9 +243,19 @@ export async function POST(request: Request) {
     });
     
     // Crear un run para procesar el mensaje con el asistente
-    const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistant.id
-    });
+    const runCreateParams: OpenAI.Beta.Threads.Runs.RunCreateParams = {
+      assistant_id: assistant.id,
+    };
+
+    if (forced_tool_id && typeof forced_tool_id === 'string' && forced_tool_id.trim() !== "") {
+      console.log(`Forzando el uso de la herramienta: ${forced_tool_id}`);
+      runCreateParams.tool_choice = {"type": "function", "function": {"name": forced_tool_id}};
+    } else {
+      // Default behavior or explicit auto
+      runCreateParams.tool_choice = "auto"; 
+    }
+
+    const run = await openai.beta.threads.runs.create(thread.id, runCreateParams);
     
     // Esperar a que finalice el run (con timeout para evitar esperas infinitas)
     const timeout = 90000; // 90 segundos máximo (para dar más tiempo a OpenAI)

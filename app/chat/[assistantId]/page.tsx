@@ -2,137 +2,82 @@
 
 import type React from "react";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { getAssistantById } from "@/lib/assistants";
-import { ArrowLeft, Send, Loader2, Paperclip, X, RefreshCw } from "lucide-react";
-import Link from "next/link";
+import { Button } from "@/components/ui/button"; // Keep for potential shadcn elements if any remain
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"; // Likely remove unless used by error display
+import { Input } from "@/components/ui/input"; // Keep for input, but will be styled manually
+import { getAssistantById, Assistant } from "@/lib/assistants"; // Ensure Assistant type is imported or defined
+import { ArrowLeft, Send, Loader2, Paperclip, X, RefreshCw, Bot, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import ReactMarkdown from "react-markdown";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import ReactMarkdown from "react-markdown"; // Keep for rendering markdown
 
+// Define Message type locally if not imported
 type Message = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system"; // Added system role
   content: string;
   imageBase64?: string | null;
   timestamp: Date;
   isStreaming?: boolean;
 };
 
-// Helper function to format assistant messages (quita citaciones como 【1†source】)
 const formatAssistantMessage = (content: string): string => {
-  const citationRegex = /\【.*?\】/g;
+  const citationRegex = /\【.*?\】/g; // Example from chat-v3
   return content.replace(citationRegex, "").trim();
 };
 
-// Inyectar CSS para animaciones personalizadas
-<style jsx global>{`
-@keyframes bounce-dot {
-  0%, 80%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-6px); }
-}
-.animated-dot {
-  display: inline-block;
-  animation: bounce-dot 1.2s infinite ease-in-out both;
-  font-size: 24px;
-  line-height: 12px;
-  font-weight: bold;
-  color: white;
-}
-.animated-dot:nth-child(1) { animation-delay: 0s; }
-.animated-dot:nth-child(2) { animation-delay: 0.2s; }
-.animated-dot:nth-child(3) { animation-delay: 0.4s; }
-@keyframes spin-slow {
-  100% { transform: rotate(360deg); }
-}
-.spin-slow { animation: spin-slow 2.5s linear infinite; }
-@keyframes gradient-move {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 100% 50%; }
-}
-.btn-gradient-animated {
-  background: linear-gradient(90deg, #3b82f6, #06b6d4, #10b981, #3b82f6);
-  background-size: 300% 100%;
-  animation: gradient-move 4s ease infinite;
-  box-shadow: 0 4px 20px 0 rgba(16,185,129,0.4);
-  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-  font-weight: 700;
-  border: 2px solid rgba(255,255,255,0.2);
-  transition: all 0.3s ease;
-  color: white !important;
-  /* Color de fondo base más oscuro para mejor visibilidad */
-  background-color: #2563eb;
-}
-.btn-gradient-animated:hover {
-  filter: brightness(1.2) saturate(1.3);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 25px 0 rgba(16,185,129,0.4);
-}
-.timestamp-outside {
-  display: block;
-  text-align: center;
-  font-size: 0.75rem;
-  color: #9ca3af;
-  margin-top: 0.25rem;
-  margin-bottom: 0.5rem;
-}
-`}</style>
-
-// Redefinir AnimatedDots para usar las nuevas clases
-const AnimatedDots = () => (
-  <span className="inline-flex gap-0.5">
-    <span className="animated-dot">.</span>
-    <span className="animated-dot">.</span>
-    <span className="animated-dot">.</span>
-  </span>
-);
-
-export default function ChatPage() {
+export default function SpecializedAssistantChatPage() {
   const params = useParams();
+  const router = useRouter();
   const assistantId = params.assistantId as string;
-  const assistant = getAssistantById(assistantId);
-
+  
+  const [assistant, setAssistant] = useState<Assistant | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamControllerRef = useRef<AbortController | null>(null);
 
-  // Lógica para la rotación del fondo (existente)
-  const [rotation, setRotation] = useState(0);
+  // Load assistant details
   useEffect(() => {
-    const handleScroll = () => {
-      const scrollY = window.scrollY || window.pageYOffset;
-      setRotation(scrollY * 0.2);
-    };
-    handleScroll();
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+    const currentAssistant = getAssistantById(assistantId);
+    if (currentAssistant) {
+      setAssistant(currentAssistant);
+    } else {
+      setError(`Asistente con ID '${assistantId}' no encontrado.`);
+      // Optionally redirect or show a more prominent error
+    }
+  }, [assistantId]);
 
   const showWelcomeMessage = useCallback(() => {
     if (assistant) {
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          content: `¡Hola! Soy ${assistant.name}. ¿En qué puedo ayudarte hoy?`,
-          timestamp: new Date(),
-          isStreaming: false,
-        },
-      ]);
+      setMessages([{
+        id: "welcome",
+        role: "assistant",
+        content: `¡Hola! Soy ${assistant.name}. ${assistant.welcome_message || "¿En qué puedo ayudarte hoy?"}`,
+        timestamp: new Date(),
+        isStreaming: false,
+      }]);
+    } else {
+       setMessages([{
+        id: "welcome-error",
+        role: "system",
+        content: "Cargando información del asistente...",
+        timestamp: new Date(),
+      }]);
     }
   }, [assistant]);
 
+  // Load initial messages from localStorage or show welcome message
   useEffect(() => {
+    if (!assistant) return; // Don't proceed until assistant info is loaded
+
     try {
       const storedThreadId = localStorage.getItem(`threadId_${assistantId}`);
       if (storedThreadId) {
@@ -144,40 +89,40 @@ export default function ChatPage() {
             const messagesWithDates = parsedMessages.map((msg: any) => ({
               ...msg,
               timestamp: new Date(msg.timestamp),
-              isStreaming: false, // Ensure old messages are not streaming
+              isStreaming: false,
             }));
-            setMessages(messagesWithDates);
+            if (messagesWithDates.length > 0) {
+                setMessages(messagesWithDates);
+                return; // Skip welcome if history exists
+            }
           } catch (e) {
             console.error("Error al cargar mensajes anteriores:", e);
-            showWelcomeMessage();
+            localStorage.removeItem(`messages_${assistantId}`); // Clear corrupted data
           }
-        } else {
-          showWelcomeMessage();
         }
-      } else {
-        showWelcomeMessage();
       }
+      showWelcomeMessage();
     } catch (e) {
       console.error("Error al inicializar el chat:", e);
       showWelcomeMessage();
     }
-  }, [assistantId, showWelcomeMessage]);
+  }, [assistantId, showWelcomeMessage, assistant]);
 
+  // Save messages to localStorage
   useEffect(() => {
-    // Guardar solo mensajes que no estén en streaming activo y si hay un threadId
-    const messagesToSave = messages.filter(msg => !msg.isStreaming);
-    if (messagesToSave.length > 0 && currentThreadId && messagesToSave[0]?.id !== 'welcome') {
+    if (messages.length > 0 && !messages.some(m => m.isStreaming) && messages[0]?.id !== 'welcome' && messages[0]?.id !== 'welcome-error' && currentThreadId) {
       try {
-        localStorage.setItem(`messages_${assistantId}`, JSON.stringify(messagesToSave));
+        localStorage.setItem(`messages_${assistantId}`, JSON.stringify(messages));
       } catch (e) {
         console.error("Error al guardar mensajes en localStorage:", e);
       }
     }
   }, [messages, assistantId, currentThreadId]);
 
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -186,16 +131,37 @@ export default function ChatPage() {
       reader.onloadend = () => setImageBase64(reader.result as string);
       reader.readAsDataURL(file);
     }
-    if (event.target) event.target.value = "";
+    if (event.target) event.target.value = ""; // Reset file input
+  };
+
+  const clearImage = () => setImageBase64(null);
+
+  const startNewConversation = () => {
+    if (confirm("¿Estás seguro de que quieres comenzar una nueva conversación? Se perderá el historial actual.")) {
+      if (streamControllerRef.current) {
+        streamControllerRef.current.abort();
+        streamControllerRef.current = null;
+      }
+      try {
+        localStorage.removeItem(`threadId_${assistantId}`);
+        localStorage.removeItem(`messages_${assistantId}`);
+      } catch (e) {
+        console.error("Error al eliminar datos de localStorage:", e);
+      }
+      setCurrentThreadId(null);
+      setError(null);
+      setInput("");
+      setImageBase64(null);
+      setIsLoading(false);
+      showWelcomeMessage();
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!input.trim() && !imageBase64) || isLoading) return;
-    
-    setError(null);
-    setIsLoading(true);
+    if ((!input.trim() && !imageBase64) || isLoading || !assistant) return;
 
+    setError(null);
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -203,38 +169,51 @@ export default function ChatPage() {
       imageBase64,
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, userMessage]);
-    
+
+    setMessages(prev => [...prev, userMessage]);
     const currentInput = input;
     const currentImageBase64 = imageBase64;
     setInput("");
     setImageBase64(null);
+    setIsLoading(true);
 
     if (streamControllerRef.current) {
-      streamControllerRef.current.abort();
+      streamControllerRef.current.abort(); // Abort previous stream if any
     }
     streamControllerRef.current = new AbortController();
     const signal = streamControllerRef.current.signal;
 
-    let assistantMessagePlaceholderId: string | null = null;
+    let assistantMessagePlaceholderId: string | null = `assistant-stream-${Date.now()}`;
     let accumulatedContent = "";
 
+    setMessages(prev => [
+      ...prev,
+      {
+        id: assistantMessagePlaceholderId!,
+        role: "assistant",
+        content: "",
+        timestamp: new Date(),
+        isStreaming: true,
+      },
+    ]);
+
     try {
-      const response = await fetch("/api/chat", {
+      // IMPORTANT: Assuming the API endpoint is /api/chat and it supports SSE
+      // This matches the `app/api/chat/route.ts.disabled` structure
+      const response = await fetch("/api/chat", { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          assistantId: assistant?.id,
+          assistantId: assistant.id, // Use the actual assistant ID from lib/assistants
           message: currentInput,
           imageBase64: currentImageBase64,
           threadId: currentThreadId,
-          // employeeToken: "some_token_if_needed" // Ejemplo si se necesitara
         }),
         signal,
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Error del servidor." }));
+        const errorData = await response.json().catch(() => ({ error: "Error del servidor o respuesta no JSON." }));
         throw new Error(errorData.error || `Error: ${response.status}`);
       }
 
@@ -245,18 +224,6 @@ export default function ChatPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
-      assistantMessagePlaceholderId = `assistant-stream-${Date.now()}`;
-      
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantMessagePlaceholderId!,
-          role: "assistant",
-          content: "", // Inicia vacío, se llenará con el stream
-          timestamp: new Date(),
-          isStreaming: true,
-        },
-      ]);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -265,309 +232,346 @@ export default function ChatPage() {
         buffer += decoder.decode(value, { stream: true });
         let eolIndex;
         
-        // Procesar cada evento SSE (delimitado por '\n\n')
         while ((eolIndex = buffer.indexOf('\n\n')) !== -1) {
           const line = buffer.substring(0, eolIndex).trim();
           buffer = buffer.substring(eolIndex + 2);
 
           if (line.startsWith("data:")) {
             const jsonData = line.substring(5).trim();
+            if (jsonData === '[DONE]') { // From chat-v3 reference, might not be sent by current API
+              setIsLoading(false);
+              setMessages(prev => prev.map(msg =>
+                msg.id === assistantMessagePlaceholderId ? { ...msg, isStreaming: false } : msg
+              ));
+              streamControllerRef.current = null;
+              return;
+            }
+
             try {
               const event = JSON.parse(jsonData);
 
-              if (event.threadId && event.threadId !== currentThreadId) {
-                setCurrentThreadId(event.threadId);
-                localStorage.setItem(`threadId_${assistantId}`, event.threadId);
+              if (event.type === 'thread.created' || event.type === 'thread.info') {
+                if (event.threadId && event.threadId !== currentThreadId) {
+                  setCurrentThreadId(event.threadId);
+                  localStorage.setItem(`threadId_${assistantId}`, event.threadId);
+                }
               }
               
-              // Asegurarse que el threadId se establece incluso si es un hilo existente
-              if (event.type === 'thread.info' && event.threadId && !currentThreadId) {
-                setCurrentThreadId(event.threadId);
-                localStorage.setItem(`threadId_${assistantId}`, event.threadId);
-              }
-
-
               switch (event.type) {
                 case 'thread.message.delta':
-                  if (event.data.delta.content && event.data.delta.content[0].type === 'text') {
+                  if (event.data.delta.content && event.data.delta.content[0]?.type === 'text') {
                     accumulatedContent += event.data.delta.content[0].text.value;
-                    setMessages(prev => prev.map(msg => 
-                      msg.id === assistantMessagePlaceholderId 
-                        ? { ...msg, content: accumulatedContent, isStreaming: true } 
+                    setMessages(prev => prev.map(msg =>
+                      msg.id === assistantMessagePlaceholderId
+                        ? { ...msg, content: formatAssistantMessage(accumulatedContent), isStreaming: true }
                         : msg
                     ));
                   }
                   break;
                 case 'thread.message.completed':
-                  // Actualizar el ID del mensaje al ID real de OpenAI y marcar como no streaming
-                  setMessages(prev => prev.map(msg => 
-                    msg.id === assistantMessagePlaceholderId 
-                      ? { ...msg, content: accumulatedContent, isStreaming: false, id: event.data.id } 
+                  setMessages(prev => prev.map(msg =>
+                    msg.id === assistantMessagePlaceholderId
+                      ? { ...msg, content: formatAssistantMessage(accumulatedContent), isStreaming: false, id: event.data.id } // Use final ID from OpenAI
                       : msg
                   ));
-                  assistantMessagePlaceholderId = null; // Resetea para el próximo mensaje
-                  accumulatedContent = "";
-                  break;
-                case 'thread.run.created':
-                  // Podrías usar esto para algún indicador específico si lo necesitas
-                  console.log("Run created:", event.data.id);
-                  setIsLoading(true); // Asegurar que sigue cargando
+                  assistantMessagePlaceholderId = null; // Reset for next potential message
+                  accumulatedContent = ""; // Reset content
                   break;
                 case 'thread.run.completed':
                   setIsLoading(false);
-                  // Si el último mensaje del asistente aún estaba en streaming, marcarlo como completo
                   setMessages(prev => prev.map(msg =>
-                    (msg.role === 'assistant' && msg.isStreaming)
-                      ? { ...msg, isStreaming: false }
-                      : msg
+                    (msg.role === 'assistant' && msg.isStreaming) ? { ...msg, isStreaming: false } : msg
                   ));
+                  streamControllerRef.current = null;
                   break;
                 case 'thread.run.failed':
                 case 'thread.run.cancelled':
                 case 'thread.run.expired':
-                  setError(event.data.last_error?.message || `Asistente finalizó con estado: ${event.type}`);
+                  setError(event.data.last_error?.message || `Error: ${event.type}`);
                   setIsLoading(false);
                   if (assistantMessagePlaceholderId) {
                     setMessages(prev => prev.filter(msg => msg.id !== assistantMessagePlaceholderId));
                   }
+                  streamControllerRef.current = null;
                   break;
-                case 'error': // Errores enviados desde nuestro backend via SSE
-                  setError(event.data.details || event.data.message || "Error de stream.");
+                case 'error': // Custom error from backend SSE
+                  setError(event.data?.details || event.data?.message || "Error en la conexión");
                   setIsLoading(false);
                   if (assistantMessagePlaceholderId) {
                     setMessages(prev => prev.filter(msg => msg.id !== assistantMessagePlaceholderId));
                   }
+                  streamControllerRef.current = null;
                   break;
-                case 'stream.ended': // Evento personalizado para indicar fin del stream desde el backend
+                case 'stream.ended': // Custom event from backend to signal end
                   setIsLoading(false);
-                   // Si el último mensaje del asistente aún estaba en streaming, marcarlo como completo
                   setMessages(prev => prev.map(msg =>
-                    (msg.role === 'assistant' && msg.isStreaming)
-                      ? { ...msg, isStreaming: false }
-                      : msg
+                    (msg.role === 'assistant' && msg.isStreaming) ? { ...msg, isStreaming: false } : msg
                   ));
-                  if (event.error) {
-                     setError(prevError => prevError || event.error); // No sobrescribir un error ya existente
-                  }
-                  console.log("Stream ended from backend.");
-                  return; // Salir del bucle de lectura
+                  if (event.error) setError(prevError => prevError || event.error);
+                  streamControllerRef.current = null;
+                  return; // Exit processing loop
               }
             } catch (e) {
-              console.error("Error parseando JSON del stream:", e, jsonData);
+              console.error("Error procesando el stream:", e, jsonData);
+              // Continue processing other lines if one fails
             }
           }
         }
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        setError(err.message || "Error de conexión o enviando el mensaje.");
-        // Revertir mensaje de usuario si hay error antes de que el stream comience o por abortar.
-         setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
-         setInput(currentInput); // Restaurar input
-         setImageBase64(currentImageBase64); // Restaurar imagen
-      }
-      if (assistantMessagePlaceholderId) { // Limpiar placeholder si hubo error
-        setMessages(prev => prev.filter(msg => msg.id !== assistantMessagePlaceholderId));
+        setError(err.message || "Error al enviar el mensaje");
+        if (assistantMessagePlaceholderId) {
+          setMessages(prev => prev.filter(msg => msg.id !== assistantMessagePlaceholderId));
+        }
       }
     } finally {
-      // Solo set isLoading a false si no fue abortado mientras aún estaba cargando una respuesta de stream.
-      // La lógica de stream.ended o error/completed debería manejar isLoading=false.
-      // Esta es una salvaguarda.
-      if (!signal.aborted || messages.every(msg => !msg.isStreaming)) {
+      // Fallback to ensure loading is stopped if not handled by a stream event
+      if (isLoading && (!streamControllerRef.current || streamControllerRef.current.signal.aborted)) {
          setIsLoading(false);
       }
-      streamControllerRef.current = null;
+       setMessages(prev => prev.map(msg => msg.isStreaming ? { ...msg, isStreaming: false } : msg ));
     }
   };
 
-  const formatTime = (date: Date) => {
-    try {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } catch (e) {
-      console.error("Error al formatear la hora:", e);
-      return "";
-    }
-  };
+  const AccentGradient = assistant?.accentColor || "bg-gradient-to-r from-orange-500 via-red-500 to-purple-600";
+  const SubtleGradient = assistant?.subtleColor || "bg-gradient-to-r from-orange-400 to-purple-500";
 
-  const startNewConversation = () => {
-    if (streamControllerRef.current) {
-      streamControllerRef.current.abort(); // Cancelar stream si está activo
-      streamControllerRef.current = null;
-    }
-    try {
-      localStorage.removeItem(`threadId_${assistantId}`);
-      localStorage.removeItem(`messages_${assistantId}`);
-    } catch (e) {
-      console.error("Error al eliminar datos de localStorage:", e);
-    }
-    setCurrentThreadId(null);
-    setError(null);
-    setInput("");
-    setImageBase64(null);
-    setIsLoading(false);
-    showWelcomeMessage();
-  };
+  const [logoRotation, setLogoRotation] = useState(0);
+  useEffect(() => {
+    let animationFrameId: number;
+    const animate = () => {
+      setLogoRotation(prev => (prev + 0.1) % 360);
+      animationFrameId = requestAnimationFrame(animate);
+    };
+    animationFrameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
 
   if (!assistant) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-neutral-950">
-        <Card className="w-full max-w-md bg-neutral-900 border-neutral-700 text-white relative z-10">
-          <CardHeader><CardTitle className="text-center text-white">Asistente no encontrado</CardTitle></CardHeader>
-          <CardContent className="text-center text-gray-300"><p>El asistente que buscas no existe o no está disponible.</p></CardContent>
-          <CardFooter className="flex justify-center"><Button asChild className="bg-blue-600 hover:bg-blue-700 text-white"><Link href="/assistants">Ver todos los asistentes</Link></Button></CardFooter>
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-950 text-white p-4">
+        <Loader2 size={48} className="animate-spin text-purple-500 mb-4" />
+        <p className="text-xl mb-2">Cargando asistente...</p>
+        {error && <p className="text-red-500">{error}</p>}
+         <Link href="/assistants" className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
+            Volver a la lista de Asistentes
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-neutral-950 text-white relative">
-      <div 
-        className="fixed inset-0 flex justify-center items-center z-0 pointer-events-none" 
-        style={{filter:'blur(12px)', opacity:0.15}} 
-      >
-        <div className="relative" style={{ width: '500px', height: '500px' }}>
-          <Image src="/LogosNuevos/logo_orbia_sin_texto.png" alt="Logo Orbia Sin Texto Background" fill priority className="object-contain" style={{ transform: `rotate(${rotation}deg)`, transition: 'transform 0.1s linear'}}/>
+    <div className="flex flex-col min-h-screen text-white bg-gray-950">
+      <div className="fixed inset-0 overflow-hidden -z-10">
+        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900/20 via-purple-900/10 to-transparent"></div>
+        <div
+          className="fixed inset-0 flex justify-center items-center pointer-events-none"
+          style={{ filter: 'blur(12px)', opacity: 0.15 }}
+        >
+          <motion.div
+            className="w-full h-full flex items-center justify-center"
+            style={{ rotate: logoRotation }}
+          >
+            <Image
+              src={assistant.logo_path || "/LogosNuevos/logo_orbia_sin_texto.png"}
+              alt={`${assistant.name} Logo Fondo`}
+              width={700}
+              height={700}
+              className="object-contain opacity-90"
+              priority
+            />
+          </motion.div>
         </div>
       </div>
 
-      <div className="relative z-10 flex flex-col h-full">
-        <AnimatePresence>
-          {error && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-              className="bg-red-500/30 border-l-4 border-red-600 p-4 fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md md:max-w-lg shadow-lg rounded-md backdrop-blur-sm"
+      <header className="sticky top-0 z-20 flex items-center justify-between p-4 border-b border-white/10 bg-gray-900/60 backdrop-blur-md">
+        <motion.button
+          whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.1)" }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => router.push('/assistants')}
+          className="p-2 rounded-full transition-colors"
+          aria-label="Volver"
+        >
+          <ArrowLeft size={20} className="text-gray-300" />
+        </motion.button>
+        <h1 className={`text-xl font-bold tracking-tight bg-clip-text text-transparent ${SubtleGradient}`}>
+          {assistant.name}
+        </h1>
+        <motion.button
+          whileHover={{ scale: 1.1, rotate: 15, backgroundColor: "rgba(255,255,255,0.1)" }}
+          whileTap={{ scale: 0.95 }}
+          onClick={startNewConversation}
+          className="p-2 rounded-full transition-colors text-sm text-gray-400 hover:text-white"
+          aria-label="Nueva conversación"
+          title="Nueva conversación"
+        >
+          <RefreshCw size={18} />
+        </motion.button>
+      </header>
+
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-5 scroll-smooth">
+        <AnimatePresence initial={false}>
+          {messages.map((message) => (
+            <motion.div
+              layout
+              key={message.id}
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.15 } }}
+              transition={{ type: "spring", stiffness: 300, damping: 25, duration: 0.3 }}
+              className={`flex ${ message.role === "system" ? "justify-center" : message.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              <div className="flex">
-                <div className="ml-3"><p className="text-sm text-red-100">Error: {error}</p></div>
-                <button onClick={() => setError(null)} className="ml-auto -mr-1 -mt-1 text-red-200 hover:text-white"><X className="h-5 w-5" /></button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        
-        <div className={`flex-1 overflow-y-auto p-4 sm:p-6 ${error ? "pt-24" : "pt-6"} pb-48 sm:pb-52`}> {/* Aumentado padding-bottom */}
-          <div className="max-w-3xl mx-auto space-y-4">
-            <AnimatePresence initial={false}>
-              {messages.map((message, index) => (
-                <motion.div 
-                  key={message.id} 
-                  initial={{ opacity: 0, y: 20 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  transition={{ duration: 0.3 }} 
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} ${index === 0 && !error ? 'mt-4' : ''}`}
-                >
-                  <div className={`flex max-w-[85%] sm:max-w-[80%] ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                    {message.role === "user" ? (
-                      <div className="h-8 w-8 ml-2 sm:ml-3 bg-emerald-600 text-white flex items-center justify-center rounded-full font-semibold flex-shrink-0 shadow-md">U</div>
-                    ) : (
-                      <div className={`h-8 w-8 mr-2 sm:mr-3 ${assistant.bgColor || 'bg-sky-600'} text-white flex items-center justify-center rounded-full font-semibold flex-shrink-0 shadow-md`}>
-                        {assistant?.name.charAt(0)}
-                      </div>
-                    )}
-                    {message.role === "assistant" && message.isStreaming && !message.content.trim() ? (
-                      <div className="rounded-lg shadow-md transition-all relative bg-neutral-800 text-gray-200 border border-neutral-700 px-4 py-2 flex items-center justify-center min-w-[40px] min-h-[40px]">
-                        <AnimatedDots />
-                      </div>
-                    ) : (
-                      <div className={`rounded-lg shadow-md transition-all relative ${message.role === "user" ? "bg-blue-600 text-white" : "bg-neutral-800 text-gray-200 border border-neutral-700"}`}>
-                        {message.role === "user" && message.imageBase64 && (
-                          <div className="p-2 border-b border-blue-500/50"><Image src={message.imageBase64} alt="Imagen adjunta" width={200} height={150} className="rounded-md object-cover" /></div>
-                        )}
-                        {(message.content || message.isStreaming) && (
-                          <div className="p-3">
-                            <div className="whitespace-pre-wrap prose prose-sm prose-invert max-w-none">
-                              {message.role === "assistant" ? (
-                                <ReactMarkdown>{formatAssistantMessage(message.content)}</ReactMarkdown>
-                              ) : (
-                                message.content
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div className="w-full flex justify-center">
-                      <span className="timestamp-outside">{formatTime(message.timestamp)}</span>
-                    </div>
-                    {message.id === "welcome" && <div className={`absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-400 animate-ping ${message.content ? "" : "hidden"}`}></div>}
+              <div className="flex items-end gap-2 max-w-[80%] md:max-w-[70%]">
+                {message.role === "assistant" && (
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center self-start ${assistant.bgColor || AccentGradient}`}>
+                     <Image src={assistant.avatar_path || "/LogosNuevos/logo_orbia_sin_texto.png"} alt="Asistente" width={20} height={20} className="rounded-full"/>
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {isLoading && !messages.some(m => m.role === 'assistant' && m.isStreaming) && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="flex justify-start mt-4"
-              >
-                <div className="flex items-center">
-                  <div className={`h-8 w-8 mr-2 sm:mr-3 ${assistant.bgColor || 'bg-sky-600'} text-white flex items-center justify-center rounded-full font-semibold flex-shrink-0 shadow-md`}>{assistant?.name.charAt(0)}</div>
-                  <div className="rounded-lg p-3 bg-neutral-800 border border-neutral-700 flex items-center shadow-md">
-                    <AnimatedDots />
-                    <span className="ml-2 text-sm text-gray-400">Conectando</span>
+                )}
+                 <div
+                  className={`px-4 py-3 rounded-2xl shadow-lg break-words
+                    ${message.role === "user"
+                      ? "bg-gradient-to-br from-orange-500 to-red-600 text-white rounded-br-md" // User bubble style from chat-v3
+                      : message.role === "assistant"
+                      ? "bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-bl-md" // Assistant bubble style from chat-v3
+                      : "bg-gray-600/50 text-gray-300 text-xs italic text-center w-full" // System message
+                    }`}
+                >
+                  {message.imageBase64 && message.role === "user" && (
+                    <div className="mb-2 rounded-lg overflow-hidden">
+                      <img
+                        src={message.imageBase64}
+                        alt="Imagen adjunta"
+                        className="max-w-full h-auto max-h-48 object-cover rounded-lg"
+                      />
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {message.role === "assistant" && message.isStreaming && !message.content ? (
+                      <div className="flex space-x-1 py-1">
+                        <div className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                    ) : (
+                      <div className="prose prose-sm prose-invert max-w-none" style={{color: 'white'}}>
+                        <ReactMarkdown components={{ 
+                            // Customize rendering if needed, e.g., for links or code blocks
+                            a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-orange-300 hover:text-orange-200 underline"/>,
+                            // p: ({node, ...props}) => <p {...props} style={{ marginBottom: '0.5em', marginTop: '0.5em' }} />,
+                         }}>
+                          {formatAssistantMessage(message.content)}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-end items-center mt-2">
+                    {message.role === "assistant" && message.isStreaming && message.content && (
+                      <div className="text-xs text-gray-400 mr-auto">
+                        Escribiendo...
+                      </div>
+                    )}
+                    <span className="text-xs text-gray-400">
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
                 </div>
-              </motion.div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-
-        <div className="bg-neutral-900/80 backdrop-blur-md border-t border-neutral-800 p-3 sm:p-4 sticky bottom-0 z-40 transition-all duration-200 ease-in-out">
-          <div className="max-w-3xl mx-auto">
-            <TooltipProvider>
-              <div className="flex justify-between items-center mb-2 sm:mb-3 px-1">
-                <Link href="/assistants" className="flex items-center gap-2 hover:opacity-80 transition-opacity text-sm text-gray-300 hover:text-white">
-                  <ArrowLeft className="h-4 w-4" /><span>Volver</span>
-                </Link>
+                {message.role === "user" && (
+                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center self-start">
+                    <User size={18} className="text-white/80"/>
+                  </div>
+                )}
               </div>
-            </TooltipProvider>
-            <AnimatePresence>
-              {imageBase64 && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="relative mb-2 p-2 border border-neutral-700 rounded-md max-w-[100px] bg-neutral-800/50">
-                  <Image src={imageBase64} alt="Preview" width={80} height={60} className="rounded object-cover" />
-                  <button onClick={() => setImageBase64(null)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow-md"><X size={14} /></button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <form onSubmit={handleSubmit} className="flex items-end gap-2">
-              <Button type="button" variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} className="border-neutral-700 text-gray-400 hover:text-white hover:bg-neutral-800 p-2 flex-shrink-0" disabled={isLoading}>
-                <Paperclip className="h-5 w-5" />
-              </Button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-red-700/90 backdrop-blur-sm border border-red-500 text-white px-4 py-2 rounded-lg shadow-xl text-sm flex items-center space-x-2"
+          >
+            <X size={16} className="text-red-200"/>
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-200 hover:text-white"
+              aria-label="Cerrar"
+            >
+              <X size={16} />
+            </button>
+          </motion.div>
+        )}
+        <div ref={messagesEndRef} />
+      </main>
+
+      <footer className="sticky bottom-0 z-20 p-3 md:p-4 border-t border-white/10 bg-gray-900/60 backdrop-blur-md">
+        <div className="max-w-3xl mx-auto">
+          {imageBase64 && (
+            <motion.div 
+                initial={{opacity:0, height:0, y:10}} animate={{opacity:1, height:'auto', y:0}} exit={{opacity:0, height:0, y:10}}
+                className="relative mb-2 p-2 border border-gray-700 rounded-lg max-w-[120px] bg-gray-800/70 backdrop-blur-sm"
+            >
+                <img src={imageBase64} alt="Vista previa" className="h-20 w-auto rounded-md object-cover"/>
+                <button onClick={clearImage} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors" aria-label="Eliminar imagen">
+                    <X size={14}/>
+                </button>
+            </motion.div>
+          )}
+          <form onSubmit={handleSubmit} className="flex items-end space-x-2 md:space-x-3">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.1, backgroundColor: "rgba(251, 146, 60, 0.1)" }}
+              whileTap={{ scale: 0.95 }}
+              className="p-2.5 rounded-full text-gray-400 hover:text-orange-400 transition-colors"
+              aria-label="Adjuntar archivo"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+            >
+              <Paperclip size={20} />
               <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" disabled={isLoading} />
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Escribe tu mensaje..."
-                disabled={isLoading}
-                className="flex-1 rounded-lg bg-neutral-800 border-neutral-700 text-white placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0 focus-visible:ring-offset-neutral-900 py-2 px-3 min-h-[40px]"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit(e as any);
-                  }
-                }}
-              />
-              <Button type="submit" disabled={isLoading || (!input.trim() && !imageBase64)} className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60 p-2 flex-shrink-0">
-                {isLoading && messages.some(m=>m.isStreaming) ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-              </Button>
-            </form>
-            <div className="mt-2 text-xs text-gray-500 text-center">
-              {isLoading && messages.some(m=>m.isStreaming) ? 'Asistente está respondiendo...' : isLoading ? 'Procesando...' : 'Las conversaciones se guardan en este navegador.'}
-            </div>
-            <div className="fixed right-5 bottom-24 z-50">
-              <Button
-                onClick={startNewConversation}
-                className="btn-gradient-animated flex items-center gap-2 px-5 py-2.5 rounded-full text-white font-bold shadow-xl hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500/50"
-                style={{ backgroundColor: '#2563eb' }} /* Añadir color base para asegurar visibilidad */
-              >
-                <span className="spin-slow"><RefreshCw className="h-4 w-4" /></span>
-                Nueva conversación
-              </Button>
-            </div>
+            </motion.button>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={`Mensaje a ${assistant.name}...`}
+              className="flex-1 p-3 rounded-xl bg-gray-800/90 border border-gray-700 focus:ring-2 focus:ring-orange-500/70 focus:border-orange-500/70 outline-none transition-all placeholder-gray-500 text-sm text-gray-100 resize-none overflow-y-auto max-h-32 leading-tight"
+              disabled={isLoading}
+              rows={1}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!isLoading && input.trim()) handleSubmit(e as any);
+                }
+              }}
+              style={{scrollbarWidth: 'thin', scrollbarColor: '#4B5563 #374151'}}
+            />
+            <motion.button
+              type="submit"
+              disabled={isLoading || (!input.trim() && !imageBase64)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`p-3 rounded-xl text-white disabled:opacity-60 transition-all duration-150 ease-in-out ${AccentGradient} hover:shadow-xl`}
+              style={{boxShadow: isLoading || (!input.trim() && !imageBase64) ? 'none' : `0 4px 15px rgba(${assistant?.accentRgb || '255,165,0'}, 0.3)`}}
+              aria-label="Enviar mensaje"
+            >
+              {isLoading ? (
+                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                  <Loader2 size={20} />
+                </motion.div>
+              ) : (
+                <Send size={20} />
+              )}
+            </motion.button>
+          </form>
+          <div className="flex justify-center items-center mt-2.5">
+            <p className="text-xs text-gray-500">
+              {isLoading ? `${assistant.name} está pensando...` : `Chat con ${assistant.name}`}
+            </p>
           </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }
