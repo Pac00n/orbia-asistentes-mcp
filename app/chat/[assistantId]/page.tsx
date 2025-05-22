@@ -7,6 +7,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button"; // Keep for potential shadcn elements if any remain
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"; // Likely remove unless used by error display
 import { Input } from "@/components/ui/input"; // Keep for input, but will be styled manually
+import Link from 'next/link'; // <--- IMPORT ADDED HERE
 import { getAssistantById, Assistant } from "@/lib/assistants"; // Ensure Assistant type is imported or defined
 import { ArrowLeft, Send, Loader2, Paperclip, X, RefreshCw, Bot, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
