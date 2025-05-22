@@ -1,43 +1,33 @@
+"use client";
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import ChatInterface from '../../../components/ChatInterface';
-import { Agent, MCPServerSse } from 'openai/agents';
 
-// Configuración del cliente MCP
-const configureMCPClient = async () => {
+// Función para obtener herramientas desde la API
+const fetchMCPTools = async () => {
   try {
-    // Inicializar el agente con los servidores MCP
-    const agent = new Agent({
-      model: "gpt-4o-mini",
-      mcp_servers: [
-        // Zapier MCP para integraciones con múltiples aplicaciones
-        new MCPServerSse(process.env.MCP_ZAPIER_URL || "https://zapier.com/mcp"),
-        
-        // Activepieces MCP para automatizaciones
-        new MCPServerSse(process.env.MCP_ACTIVEPIECES_URL || "https://cloud.activepieces.com/mcp"),
-        
-        // Brave Search MCP para búsquedas web
-        new MCPServerSse(process.env.MCP_BRAVE_SEARCH_URL || "https://search.bravesoftware.com/mcp"),
-        
-        // Web-Search MCP para búsquedas en Google
-        new MCPServerSse(process.env.MCP_WEB_SEARCH_URL || "https://web-search.mcpservers.org/mcp")
-      ]
+    const response = await fetch('/api/chat/mcpv5', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
     });
-
-    // Listar herramientas disponibles para verificación
-    const tools = await agent.listTools();
-    console.log(`MCP v5: ${tools.length} herramientas disponibles`);
     
-    return agent;
+    if (!response.ok) {
+      throw new Error(`Error al obtener herramientas: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('Datos de API MCP v5:', data);
+    return data;
   } catch (error) {
-    console.error("Error al configurar cliente MCP:", error);
-    return null;
+    console.error('Error al obtener herramientas MCP:', error);
+    return { success: false, toolCount: 0, tools: [] };
   }
 };
 
 export default function MCPv5Chat() {
   const router = useRouter();
-  const [agent, setAgent] = useState(null);
   const [toolCount, setToolCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,13 +35,9 @@ export default function MCPv5Chat() {
     const initMCP = async () => {
       setIsLoading(true);
       try {
-        const mcpAgent = await configureMCPClient();
-        if (mcpAgent) {
-          setAgent(mcpAgent);
-          
-          // Obtener y actualizar el contador de herramientas
-          const tools = await mcpAgent.listTools();
-          setToolCount(tools.length);
+        const data = await fetchMCPTools();
+        if (data.success) {
+          setToolCount(data.toolCount);
         }
       } catch (error) {
         console.error("Error al inicializar MCP:", error);
@@ -93,12 +79,31 @@ export default function MCPv5Chat() {
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
           </div>
         ) : (
-          <ChatInterface 
-            assistantId="mcp-v5"
-            initialMessage="¡Hola! Soy el asistente MCP v5 con acceso a herramientas externas como Zapier, Activepieces, y búsqueda web. ¿En qué puedo ayudarte hoy?"
-            mcpAgent={agent}
-            toolCount={toolCount}
-          />
+          <div className="bg-gray-800 rounded-lg p-6 shadow-lg max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold text-white mb-4">Asistente MCP v5</h2>
+            <p className="text-gray-300 mb-6">Este asistente tiene acceso a {toolCount} herramientas externas mediante servidores MCP.</p>
+            
+            <div className="bg-gray-700 p-4 rounded-md mb-6">
+              <h3 className="text-lg font-semibold text-emerald-400 mb-2">Servidores conectados:</h3>
+              <ul className="list-disc pl-5 text-gray-300 space-y-2">
+                <li>Zapier MCP: +7000 aplicaciones integradas</li>
+                <li>Activepieces MCP: ~280 integraciones</li>
+                <li>Brave Search MCP: Búsqueda web</li>
+                <li>Web-Search MCP: Búsqueda Google</li>
+              </ul>
+            </div>
+            
+            <p className="text-gray-400 italic mb-4">Esta es la versión simplificada del chat MCP v5. Para usar el chat completo, es necesario implementar un componente ChatInterface personalizado.</p>
+            
+            <div className="flex justify-center">
+              <button 
+                onClick={() => router.push('/assistants')}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors"
+              >
+                Volver al inicio
+              </button>
+            </div>
+          </div>
         )}
       </main>
     </div>
