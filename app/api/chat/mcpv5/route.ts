@@ -41,7 +41,7 @@ export async function GET() {
 
 // Endpoint para procesar mensajes usando openai.responses.create()
 export async function POST(request: Request) {
-  console.log("[API MCPv5 POST / OpenAI Responses API] Request received to process message.");
+  console.log("[API MCPv5 POST V2_LOGGING] Processing request.");
   try {
     const body = await request.json();
     const { assistantId, message, forced_tool_id } = body;
@@ -129,24 +129,28 @@ export async function POST(request: Request) {
       input: fullInput,
       tools: mappedMcpTools.length > 0 ? mappedMcpTools : undefined, // Pass undefined if no tools are applicable
     });
-    console.log("[API MCPv5 POST / OpenAI Responses API] openai.responses.create() call completed.");
+    console.log("[API MCPv5 POST V2_LOGGING] Full OpenAI Response object:", JSON.stringify(openAIResponse, null, 2)); 
 
     // @ts-ignore
     const rawOutputText = openAIResponse.output;
     // @ts-ignore
-    const toolErrors = openAIResponse.tool_errors || null;
+    const toolErrors = openAIResponse.tool_errors; 
+
+    console.log("[API MCPv5 POST V2_LOGGING] Raw outputText from OpenAI:", rawOutputText);
+    console.log("[API MCPv5 POST V2_LOGGING] tool_errors from OpenAI:", JSON.stringify(toolErrors, null, 2)); 
 
     const finalAssistantText = (typeof rawOutputText === 'string') ? rawOutputText : "No text output received from assistant.";
     
-    console.log(`[API MCPv5 POST / OpenAI Responses API] Final assistant output: "${finalAssistantText.substring(0,100)}..."`);
-    if (toolErrors) {
-      console.warn(`[API MCPv5 POST / OpenAI Responses API] Tool errors reported:`, toolErrors);
+    console.log(`[API MCPv5 POST V2_LOGGING] Final assistant output for client: "${finalAssistantText.substring(0,100)}..."`);
+    
+    if (toolErrors && (!Array.isArray(toolErrors) || toolErrors.length > 0)) { 
+      console.warn("[API MCPv5 POST V2_LOGGING] Tool errors reported by OpenAI:", toolErrors);
     }
     
     return NextResponse.json({ 
       success: true, 
-      response: finalAssistantText, // Use the guarded variable
-      tool_errors: toolErrors 
+      response: finalAssistantText, 
+      tool_errors: toolErrors || null 
     });
 
   } catch (error: any) {
