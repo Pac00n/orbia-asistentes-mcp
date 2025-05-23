@@ -250,20 +250,7 @@ export async function POST(req: NextRequest) {
             // Implicitly continue while loop if finish_reason was 'tool_calls'
           } // End of while(true) loop for handling multiple OpenAI calls
 
-        } catch (error: any) {
-          console.error("[API Chat] Error within ReadableStream:", error);
-          let errorMessage = "Internal server error during stream.";
-                controller.close();
-                return;
-              }
-            }
-          } // End of for-await loop for stream chunks
-
-          console.warn("[API Chat] OpenAI stream finished without a 'stop' or 'tool_calls' finish reason in the last chunk.");
-          sendEvent(controller, { type: 'stream.ended', data: { clientThreadId, warning: 'Stream ended unexpectedly.' } });
-          controller.close();
-
-        } catch (error: any) {
+        } catch (error: any) { // This is the main catch for the try block at the start of the `start(controller)` function.
           console.error("[API Chat] Error within ReadableStream:", error);
           let errorMessage = "Internal server error during stream.";
           if (error instanceof OpenAI.APIError) {
