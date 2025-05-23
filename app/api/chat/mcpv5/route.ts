@@ -72,8 +72,7 @@ export async function POST(request: Request) {
     let mcpConfigsToUse: McpServerConfig[] = [];
 
     // Process and filter MCP configurations
-    let allMcpConfigs: McpServerConfig[] = getMcpServersConfiguration();
-    let mcpConfigsToUse: McpServerConfig[] = [];
+    // The duplicate declarations of allMcpConfigs and mcpConfigsToUse were here and are now removed.
 
     for (const server of allMcpConfigs) {
       if (server.id === "exa") {
