@@ -1,31 +1,27 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { McpClient } from '@/lib/mcp/client'; // Import McpClient
-import { getAssistantById } from '@/lib/assistants'; // Import getAssistantById
+import { getAssistantById } from '@/lib/assistants';
+import { getMcpServersConfiguration, McpServerConfig } from '@/lib/mcp/config';
 
 // Configuración de OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Endpoint para obtener la lista de herramientas
+// Endpoint para obtener la lista de herramientas (MCP Servers)
 export async function GET() {
-  console.log("[API MCPv5 GET] Request received to list tools.");
+  console.log("[API MCPv5 GET / OpenAI Responses API] Request received to list tools.");
   try {
-    const mcpClient = new McpClient();
-    await mcpClient.initialize();
-    console.log("[API MCPv5 GET] McpClient initialized.");
+    const mcpServers = getMcpServersConfiguration();
+    console.log(`[API MCPv5 GET / OpenAI Responses API] Retrieved ${mcpServers.length} MCP server configurations.`);
 
-    const openAITools = mcpClient.getOpenAIToolDefinitions();
-    console.log(`[API MCPv5 GET] Retrieved ${openAITools.length} tools from McpClient.`);
-
-    const frontendTools = openAITools.map(tool => ({
-      id: tool.function.name, // Use the OpenAI tool name as ID
-      name: tool.function.name,
-      description: tool.function.description,
+    const frontendTools = mcpServers.map(server => ({
+      id: server.id, // Use server.id as the tool ID for the frontend
+      name: server.name || server.id,
+      description: `MCP Server: ${server.name || server.id}`, // Generic description
     }));
     
-    console.log("[API MCPv5 GET] Tools transformed for frontend.");
+    console.log("[API MCPv5 GET / OpenAI Responses API] MCP Servers transformed for frontend.");
     return NextResponse.json({
       success: true,
       toolCount: frontendTools.length,
@@ -33,158 +29,114 @@ export async function GET() {
     });
 
   } catch (error: any) {
-    console.error("[API MCPv5 GET] Error fetching tools:", error);
+    console.error("[API MCPv5 GET / OpenAI Responses API] Error fetching MCP server configurations:", error);
     return NextResponse.json({
       success: false,
       toolCount: 0,
       tools: [],
-      error: "Error al obtener herramientas MCP: " + error.message,
+      error: "Error al obtener configuraciones de MCP Server: " + error.message,
     }, { status: 500 }); 
   }
 }
 
-// Endpoint para procesar mensajes
+// Endpoint para procesar mensajes usando openai.responses.create()
 export async function POST(request: Request) {
-  console.log("[API MCPv5 POST] Request received to process message.");
+  console.log("[API MCPv5 POST / OpenAI Responses API] Request received to process message.");
   try {
     const body = await request.json();
     const { assistantId, message, forced_tool_id } = body;
 
     if (!assistantId || typeof assistantId !== 'string') {
-        console.error("[API MCPv5 POST] Invalid or missing assistantId.");
+        console.error("[API MCPv5 POST / OpenAI Responses API] Invalid or missing assistantId.");
         return NextResponse.json({ success: false, error: "Se requiere un assistantId válido." }, { status: 400 });
     }
     if (!message || typeof message !== 'string') {
-      console.error("[API MCPv5 POST] Invalid or missing message.");
+      console.error("[API MCPv5 POST / OpenAI Responses API] Invalid or missing message.");
       return NextResponse.json({ success: false, error: "Se requiere un mensaje." }, { status: 400 });
     }
-    console.log(`[API MCPv5 POST] Assistant ID: ${assistantId}, Message: "${message.substring(0, 50)}...", Forced Tool ID: ${forced_tool_id}`);
+    console.log(`[API MCPv5 POST / OpenAI Responses API] Assistant ID: ${assistantId}, Message: "${message.substring(0, 50)}...", Forced Tool ID: ${forced_tool_id}`);
 
     const assistantConfig = getAssistantById(assistantId);
     if (!assistantConfig) {
-      console.error(`[API MCPv5 POST] Assistant configuration not found for ID: ${assistantId}`);
+      console.error(`[API MCPv5 POST / OpenAI Responses API] Assistant configuration not found for ID: ${assistantId}`);
       return NextResponse.json({ success: false, error: "Configuración del asistente no encontrada." }, { status: 404 });
     }
-    console.log(`[API MCPv5 POST] Loaded assistant config for: ${assistantConfig.name}`);
+    console.log(`[API MCPv5 POST / OpenAI Responses API] Loaded assistant config for: ${assistantConfig.name}`);
 
-    const mcpClient = new McpClient();
-    await mcpClient.initialize();
-    console.log("[API MCPv5 POST] McpClient initialized.");
+    const fullInput = assistantConfig.instructions 
+      ? `${assistantConfig.instructions}\n\nUser: ${message}` 
+      : message;
+    console.log(`[API MCPv5 POST / OpenAI Responses API] Full input prompt: "${fullInput.substring(0,150)}..."`);
 
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-
-    // System Message
-    let systemContent = assistantConfig.instructions || assistantConfig.description;
-    if (!systemContent && assistantConfig.id === "mcp-test-assistant") {
-        // Specific default for mcp-test-assistant if instructions/description are somehow empty
-        systemContent = "You are a helpful assistant designed for testing tool usage with MCP. Use tools proactively.";
-    } else if (!systemContent) {
-        systemContent = "You are a helpful assistant.";
-    }
-    messages.push({ role: 'system', content: systemContent });
-    console.log(`[API MCPv5 POST] System prompt: "${systemContent.substring(0,100)}..."`);
-    
-    // User Message
-    messages.push({ role: 'user', content: message });
-
-    // Tool Choice Logic
-    let toolChoice: OpenAI.Chat.Completions.ChatCompletionToolChoiceOption = "auto";
+    let mcpConfigsToUse: McpServerConfig[] = getMcpServersConfiguration();
     if (forced_tool_id && typeof forced_tool_id === 'string' && forced_tool_id.trim() !== "") {
-      console.log(`[API MCPv5 POST] Forcing tool: ${forced_tool_id}`);
-      toolChoice = { type: "function", function: { name: forced_tool_id } };
-    }
-
-    console.log("[API MCPv5 POST] Making initial call to OpenAI Chat Completions API.");
-    let completion = await openai.chat.completions.create({
-      model: assistantConfig.model || "gpt-4o-mini",
-      messages: messages,
-      stream: false, // Non-streaming as per requirement
-      tools: mcpClient.getOpenAIToolDefinitions(),
-      tool_choice: toolChoice,
-    });
-    console.log("[API MCPv5 POST] Initial OpenAI API call completed.");
-
-    let assistantResponse = completion.choices[0].message;
-    messages.push(assistantResponse); // Add assistant's first response to messages
-
-    // Handle tool calls if present
-    if (assistantResponse.tool_calls) {
-      console.log(`[API MCPv5 POST] Assistant requested ${assistantResponse.tool_calls.length} tool call(s).`);
-      const toolOutputs: OpenAI.Chat.Completions.ChatCompletionToolMessageParam[] = [];
-
-      for (const toolCall of assistantResponse.tool_calls) {
-        const toolName = toolCall.function.name;
-        const toolArgsString = toolCall.function.arguments;
-        console.log(`[API MCPv5 POST] Executing tool: ${toolName} with args: ${toolArgsString}`);
-        
-        try {
-          const parsedArgs = JSON.parse(toolArgsString);
-          const result = await mcpClient.executeTool(toolName, parsedArgs);
-          const resultString = typeof result === 'string' ? result : JSON.stringify(result);
-          
-          console.log(`[API MCPv5 POST] Tool ${toolName} executed. Result preview: ${resultString.substring(0,100)}...`);
-          toolOutputs.push({
-            tool_call_id: toolCall.id,
-            role: 'tool',
-            content: resultString,
-          });
-        } catch (error: any) {
-          console.error(`[API MCPv5 POST] Error executing tool ${toolName}:`, error);
-          toolOutputs.push({
-            tool_call_id: toolCall.id,
-            role: 'tool',
-            content: JSON.stringify({ error: `Error executing tool ${toolName}: ${error.message}` }),
-          });
-        }
+      console.log(`[API MCPv5 POST / OpenAI Responses API] Filtering MCP servers to force tool: ${forced_tool_id}`);
+      mcpConfigsToUse = mcpConfigsToUse.filter(server => server.id === forced_tool_id);
+      if (mcpConfigsToUse.length === 0) {
+        console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool ID ${forced_tool_id} not found in MCP configurations.`);
+        return NextResponse.json({ success: false, error: `Herramienta forzada ${forced_tool_id} no encontrada.` }, { status: 400 });
       }
-      messages.push(...toolOutputs); // Add all tool results to messages
-
-      console.log("[API MCPv5 POST] Making second call to OpenAI Chat Completions API with tool results.");
-      completion = await openai.chat.completions.create({
-        model: assistantConfig.model || "gpt-4o-mini",
-        messages: messages,
-        stream: false,
-        // tools and tool_choice might not be needed here if we expect a final text response
-      });
-      console.log("[API MCPv5 POST] Second OpenAI API call completed.");
-      assistantResponse = completion.choices[0].message;
-      // No need to push this response to messages array if it's the final one for this turn.
     }
+    console.log(`[API MCPv5 POST / OpenAI Responses API] Using ${mcpConfigsToUse.length} MCP server(s) for tools.`);
 
-    const finalContent = assistantResponse.content || "No text content received from assistant.";
-    console.log(`[API MCPv5 POST] Final assistant content: "${finalContent.substring(0,100)}..."`);
+    const mappedMcpTools: OpenAI.Beta.Responses.Tool.MCP[] = mcpConfigsToUse.map(mcpServer => {
+      const headers: { [key: string]: string } = {};
+      if (mcpServer.auth?.type === 'bearer_token' && mcpServer.auth.token) {
+        headers['Authorization'] = `Bearer ${mcpServer.auth.token}`;
+      } else if (mcpServer.auth?.type === 'custom_header' && mcpServer.auth.header_name && mcpServer.auth.token) {
+        headers[mcpServer.auth.header_name] = mcpServer.auth.token;
+      }
+      if (mcpServer.apiKey) { // Assuming apiKey implies a specific header, e.g., X-API-Key
+        headers['X-API-Key'] = mcpServer.apiKey; // Adjust header name if necessary
+      }
+      return {
+        type: "mcp",
+        server_label: mcpServer.id,
+        server_url: mcpServer.url,
+        headers: Object.keys(headers).length > 0 ? headers : undefined, // Only include headers if populated
+      };
+    });
+
+    console.log("[API MCPv5 POST / OpenAI Responses API] Calling openai.responses.create().");
+    // @ts-ignore - Assuming openai.responses.create is available, might need type update for openai package
+    const openAIResponse = await openai.responses.create({
+      model: assistantConfig.model || "gpt-4o-mini",
+      input: fullInput,
+      tools: mappedMcpTools.length > 0 ? mappedMcpTools : undefined, // Pass undefined if no tools are applicable
+    });
+    console.log("[API MCPv5 POST / OpenAI Responses API] openai.responses.create() call completed.");
+
+    // @ts-ignore
+    const outputText = openAIResponse.output || "No text output received from assistant.";
+    // @ts-ignore
+    const toolErrors = openAIResponse.tool_errors || null;
     
-    // Include raw tool results in the response if any tools were called
-    const rawToolResults = messages
-        .filter(msg => msg.role === 'tool' && msg.tool_call_id)
-        // @ts-ignore
-        .map(msg => ({ tool_call_id: msg.tool_call_id, content: msg.content }));
-
-    let responsePayload: any = {
-        success: true,
-        response: finalContent,
-    };
-
-    if (rawToolResults.length > 0) {
-        responsePayload.rawToolResults = rawToolResults;
-        // Attempt to add a "verification info" section similar to the old logic for frontend display
-        const verificationInfo = rawToolResults.map(tr => {
-            let toolName = "unknown_tool";
-            // Try to find the tool name from the assistant's tool_calls
-            const originalToolCall = assistantResponse.tool_calls?.find(tc => tc.id === tr.tool_call_id);
-            if (originalToolCall) {
-                toolName = originalToolCall.function.name;
-            }
-            return `[Herramienta usada: ${toolName}]\nRaw Result: ${tr.content}`;
-        }).join("\n\n");
-        responsePayload.response += `\n\n---\nInformación de verificación:\n${verificationInfo}`;
+    console.log(`[API MCPv5 POST / OpenAI Responses API] Final assistant output: "${outputText.substring(0,100)}..."`);
+    if (toolErrors) {
+      console.warn(`[API MCPv5 POST / OpenAI Responses API] Tool errors reported:`, toolErrors);
     }
-
-
-    return NextResponse.json(responsePayload);
+    
+    return NextResponse.json({ 
+      success: true, 
+      response: outputText,
+      tool_errors: toolErrors 
+    });
 
   } catch (error: any) {
-    console.error("[API MCPv5 POST] Critical error in POST handler:", error);
+    console.error("[API MCPv5 POST / OpenAI Responses API] Critical error in POST handler:", error);
+    // Check if it's an OpenAI APIError for more specific feedback
+    if (error instanceof OpenAI.APIError) {
+        console.error(`[API MCPv5 POST / OpenAI Responses API] OpenAI API Error: ${error.status} ${error.name} ${error.message}`);
+        return NextResponse.json({
+          success: false,
+          response: `Error de OpenAI: ${error.message}`,
+          error: {
+            message: error.message,
+            status: error.status,
+            name: error.name,
+          }
+        }, { status: error.status || 500 });
+    }
     return NextResponse.json({
       success: false,
       response: "Lo siento, no pude procesar tu mensaje debido a un error interno.",
