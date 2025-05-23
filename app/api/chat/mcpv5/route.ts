@@ -114,12 +114,15 @@ export async function POST(request: Request) {
         headers['X-API-Key'] = mcpServer.apiKey;
       }
       
-      return {
+      const toolDefinition: OpenAI.Beta.Responses.Tool.MCP = {
         type: "mcp",
         server_label: mcpServer.id,
         server_url: mcpServer.url, // This URL is now processed for Exa
         headers: Object.keys(headers).length > 0 ? headers : undefined,
+        // @ts-ignore - Attempt to add auto-approval field
+        require_approval: "never" 
       };
+      return toolDefinition;
     });
 
     console.log("[API MCPv5 POST / OpenAI Responses API] Calling openai.responses.create(). Tools being sent:", JSON.stringify(mappedMcpTools, null, 2));

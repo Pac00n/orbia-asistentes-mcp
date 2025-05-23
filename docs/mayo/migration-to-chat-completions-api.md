@@ -31,6 +31,7 @@ The API route `/api/chat/mcpv5/route.ts`, which serves the "MCP v5 - mcp-test-as
             *   `server_label: server.id` (a unique identifier for the MCP server)
             *   `server_url: server.url` (For Exa, this URL is processed at runtime, see "Exa Web Search Integration" below).
             *   `headers`: Dynamically constructed based on the `auth` (bearer token, custom header) or legacy `apiKey` fields in `MCP_SERVERS_CONFIG` for each server.
+            *   `require_approval: "never"`: This field is added (with `@ts-ignore` in the code as it might not be in the current SDK's typings) to instruct OpenAI to attempt to execute the tool directly without an intermediate approval step, aiming for a more streamlined interaction.
         *   If `forced_tool_id` is provided in the request (matching a `server.id`), the `tools` array passed to `responses.create()` is filtered to only include that specific MCP server, effectively forcing its selection.
     *   **API Call**: `await openai.responses.create({ model: ..., input: ..., tools: ... })`. The call is non-streaming.
     *   **Response Handling**: The final output from the assistant is taken from `openAIResponse.output`. Any errors reported by MCP servers during OpenAI's attempt to call them are expected in `openAIResponse.tool_errors[]` and are returned to the client.
@@ -56,7 +57,7 @@ The API route `/api/chat/mcpv5/route.ts`, which serves the "MCP v5 - mcp-test-as
 ## 4. Tool Calling Functionality (via OpenAI Responses API)
 
 *   For "MCP v5 - mcp-test-assistant", OpenAI now directly calls the MCP servers specified in the `tools` array.
-*   The backend (`/api/chat/mcpv5/route.ts`) no longer makes direct HTTP requests to MCP servers. It only declares them to the `responses.create()` API. This includes dynamically configuring the Exa tool's URL with its API key at runtime.
+*   The backend (`/api/chat/mcpv5/route.ts`) no longer makes direct HTTP requests to MCP servers. It only declares them to the `responses.create()` API. This includes dynamically configuring the Exa tool's URL with its API key at runtime and setting `require_approval: "never"` for all MCP tools.
 *   This aligns with the user's provided guide, aiming to reduce backend complexity and leverage OpenAI's infrastructure for network interactions with MCPs.
 
 ## 5. Testing and Verification (Revised)
@@ -67,6 +68,8 @@ Thorough testing is required for:
     *   Confirm that it uses the `openai.responses.create()` API. (This might involve checking Vercel logs for OpenAI API calls if `OPENAI_LOG=debug` can be enabled, or observing behavior).
     *   Verify successful invocation of external tools (e.g., "fs-demo", "git", "fetch") via OpenAI. Check that `demo.mcp.tools` DNS issue (if still present) is now reported in `tool_errors` by the Responses API.
     *   Test the "Force Tool" functionality.
+*   **Tool Execution Flow (for "MCP v5 - mcp-test-assistant"):**
+    *   Verify that with `require_approval: "never"`, OpenAI directly executes the chosen MCP tool (e.g., Exa) and the backend receives a final response or a `tool_error`, rather than an `mcp_approval_request` object in the `output` array.
 *   **Exa Web Search Integration (for "MCP v5 - mcp-test-assistant"):**
     *   Ensure the `EXA_API_KEY` environment variable is correctly set in Vercel.
     *   Add or verify the "exa" tool configuration in `MCP_SERVERS_CONFIG` with the URL placeholder `${EXA_API_KEY}`.
