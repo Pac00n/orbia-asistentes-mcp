@@ -68,13 +68,32 @@ export async function POST(request: Request) {
       : message;
     console.log(`[API MCPv5 POST / OpenAI Responses API] Full input prompt: "${fullInput.substring(0,150)}..."`);
 
-    let mcpConfigsToUse: McpServerConfig[] = getMcpServersConfiguration();
+    let allMcpConfigs: McpServerConfig[] = getMcpServersConfiguration();
+    let mcpConfigsToUse: McpServerConfig[] = [];
+
+    // Process and filter MCP configurations
+    for (const server of allMcpConfigs) {
+      let processedServer = { ...server }; // Clone server config
+      if (server.id === "exa" && server.url.includes('${EXA_API_KEY}')) {
+        const exaApiKey = process.env.EXA_API_KEY;
+        if (exaApiKey) {
+          processedServer.url = server.url.replace('${EXA_API_KEY}', exaApiKey);
+          console.log(`[API MCPv5 POST / OpenAI Responses API] Substituted EXA_API_KEY for exa tool. URL: ${processedServer.url}`);
+        } else {
+          console.warn(`[API MCPv5 POST / OpenAI Responses API] EXA_API_KEY not found for 'exa' tool. Excluding it.`);
+          continue; // Skip this server if API key is missing
+        }
+      }
+      mcpConfigsToUse.push(processedServer);
+    }
+
+    // Apply forced_tool_id filtering *after* processing URLs
     if (forced_tool_id && typeof forced_tool_id === 'string' && forced_tool_id.trim() !== "") {
       console.log(`[API MCPv5 POST / OpenAI Responses API] Filtering MCP servers to force tool: ${forced_tool_id}`);
       mcpConfigsToUse = mcpConfigsToUse.filter(server => server.id === forced_tool_id);
       if (mcpConfigsToUse.length === 0) {
-        console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool ID ${forced_tool_id} not found in MCP configurations.`);
-        return NextResponse.json({ success: false, error: `Herramienta forzada ${forced_tool_id} no encontrada.` }, { status: 400 });
+        console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool ID ${forced_tool_id} not found or was excluded (e.g., missing API key for 'exa').`);
+        return NextResponse.json({ success: false, error: `Herramienta forzada ${forced_tool_id} no disponible.` }, { status: 400 });
       }
     }
     console.log(`[API MCPv5 POST / OpenAI Responses API] Using ${mcpConfigsToUse.length} MCP server(s) for tools.`);
@@ -86,18 +105,24 @@ export async function POST(request: Request) {
       } else if (mcpServer.auth?.type === 'custom_header' && mcpServer.auth.header_name && mcpServer.auth.token) {
         headers[mcpServer.auth.header_name] = mcpServer.auth.token;
       }
-      if (mcpServer.apiKey) { // Assuming apiKey implies a specific header, e.g., X-API-Key
-        headers['X-API-Key'] = mcpServer.apiKey; // Adjust header name if necessary
+      // Note: For Exa, if it uses an API key in the URL, it might not need an X-API-Key header.
+      // If it also requires a header, that should be part of its McpServerConfig.auth or a specific check.
+      // The current logic assumes EXA_API_KEY is only for URL substitution.
+      // If Exa also uses a specific header like 'x-api-key' (different from the generic 'apiKey' field),
+      // that would need explicit handling here or in its McpServerConfig.
+      if (mcpServer.apiKey && mcpServer.id !== "exa") { // Example: Don't add generic X-API-Key if it's exa and key is in URL
+        headers['X-API-Key'] = mcpServer.apiKey;
       }
+      
       return {
         type: "mcp",
         server_label: mcpServer.id,
-        server_url: mcpServer.url,
-        headers: Object.keys(headers).length > 0 ? headers : undefined, // Only include headers if populated
+        server_url: mcpServer.url, // This URL is now processed for Exa
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
       };
     });
 
-    console.log("[API MCPv5 POST / OpenAI Responses API] Calling openai.responses.create().");
+    console.log("[API MCPv5 POST / OpenAI Responses API] Calling openai.responses.create(). Tools being sent:", JSON.stringify(mappedMcpTools, null, 2));
     // @ts-ignore - Assuming openai.responses.create is available, might need type update for openai package
     const openAIResponse = await openai.responses.create({
       model: assistantConfig.model || "gpt-4o-mini",
