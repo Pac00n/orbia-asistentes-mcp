@@ -72,27 +72,33 @@ export async function POST(request: Request) {
     let mcpConfigsToUse: McpServerConfig[] = [];
 
     // Process and filter MCP configurations
+    let allMcpConfigs: McpServerConfig[] = getMcpServersConfiguration();
+    let mcpConfigsToUse: McpServerConfig[] = [];
+
     for (const server of allMcpConfigs) {
-      let processedServer = { ...server }; // Clone server config
-      if (server.id === "exa" && server.url.includes('${EXA_API_KEY}')) {
+      if (server.id === "exa") {
         const exaApiKey = process.env.EXA_API_KEY;
-        if (exaApiKey) {
-          processedServer.url = server.url.replace('${EXA_API_KEY}', exaApiKey);
-          console.log(`[API MCPv5 POST / OpenAI Responses API] Substituted EXA_API_KEY for exa tool. URL: ${processedServer.url}`);
-        } else {
-          console.warn(`[API MCPv5 POST / OpenAI Responses API] EXA_API_KEY not found for 'exa' tool. Excluding it.`);
+        if (!exaApiKey) {
+          console.warn("[API MCPv5 POST / OpenAI Responses API] EXA_API_KEY not found for 'exa' tool. Excluding it.");
           continue; // Skip this server if API key is missing
         }
+        // For Exa, the URL from MCP_SERVERS_CONFIG is expected to be the base URL.
+        // The API key will be added to headers, not substituted in the URL here.
       }
-      mcpConfigsToUse.push(processedServer);
+      mcpConfigsToUse.push(server); // Add server if it's not Exa, or if it's Exa and key is present (key checked during mapping)
     }
 
-    // Apply forced_tool_id filtering *after* processing URLs
+    // Apply forced_tool_id filtering
     if (forced_tool_id && typeof forced_tool_id === 'string' && forced_tool_id.trim() !== "") {
       console.log(`[API MCPv5 POST / OpenAI Responses API] Filtering MCP servers to force tool: ${forced_tool_id}`);
+      // Check if the forced tool is 'exa' and if its API key is missing
+      if (forced_tool_id === "exa" && !process.env.EXA_API_KEY) {
+         console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool 'exa' selected, but EXA_API_KEY is missing.`);
+         return NextResponse.json({ success: false, error: `Herramienta forzada ${forced_tool_id} no disponible (falta API key).` }, { status: 400 });
+      }
       mcpConfigsToUse = mcpConfigsToUse.filter(server => server.id === forced_tool_id);
       if (mcpConfigsToUse.length === 0) {
-        console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool ID ${forced_tool_id} not found or was excluded (e.g., missing API key for 'exa').`);
+        console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool ID ${forced_tool_id} not found after initial processing.`);
         return NextResponse.json({ success: false, error: `Herramienta forzada ${forced_tool_id} no disponible.` }, { status: 400 });
       }
     }
@@ -100,24 +106,30 @@ export async function POST(request: Request) {
 
     const mappedMcpTools: OpenAI.Beta.Responses.Tool.MCP[] = mcpConfigsToUse.map(mcpServer => {
       const headers: { [key: string]: string } = {};
-      if (mcpServer.auth?.type === 'bearer_token' && mcpServer.auth.token) {
-        headers['Authorization'] = `Bearer ${mcpServer.auth.token}`;
-      } else if (mcpServer.auth?.type === 'custom_header' && mcpServer.auth.header_name && mcpServer.auth.token) {
-        headers[mcpServer.auth.header_name] = mcpServer.auth.token;
-      }
-      // Note: For Exa, if it uses an API key in the URL, it might not need an X-API-Key header.
-      // If it also requires a header, that should be part of its McpServerConfig.auth or a specific check.
-      // The current logic assumes EXA_API_KEY is only for URL substitution.
-      // If Exa also uses a specific header like 'x-api-key' (different from the generic 'apiKey' field),
-      // that would need explicit handling here or in its McpServerConfig.
-      if (mcpServer.apiKey && mcpServer.id !== "exa") { // Example: Don't add generic X-API-Key if it's exa and key is in URL
-        headers['X-API-Key'] = mcpServer.apiKey;
+      
+      if (mcpServer.id === "exa") {
+        const exaApiKey = process.env.EXA_API_KEY;
+        if (exaApiKey) {
+          headers['x-api-key'] = exaApiKey; // Correct header for Exa
+        } 
+        // If exaApiKey is missing here, it should have been filtered out already if 'exa' was not forced.
+        // If 'exa' was forced and key is missing, the earlier check handles it.
+      } else {
+        // Handle auth for other servers
+        if (mcpServer.auth?.type === 'bearer_token' && mcpServer.auth.token) {
+          headers['Authorization'] = `Bearer ${mcpServer.auth.token}`;
+        } else if (mcpServer.auth?.type === 'custom_header' && mcpServer.auth.header_name && mcpServer.auth.token) {
+          headers[mcpServer.auth.header_name] = mcpServer.auth.token;
+        }
+        if (mcpServer.apiKey) { 
+          headers['X-API-Key'] = mcpServer.apiKey;
+        }
       }
       
       const toolDefinition: OpenAI.Beta.Responses.Tool.MCP = {
         type: "mcp",
         server_label: mcpServer.id,
-        server_url: mcpServer.url, // This URL is now processed for Exa
+        server_url: mcpServer.url, // URL is now the base URL for Exa
         headers: Object.keys(headers).length > 0 ? headers : undefined,
         // @ts-ignore - Attempt to add auto-approval field
         require_approval: "never" 
@@ -135,25 +147,58 @@ export async function POST(request: Request) {
     console.log("[API MCPv5 POST V2_LOGGING] Full OpenAI Response object:", JSON.stringify(openAIResponse, null, 2)); 
 
     // @ts-ignore
-    const rawOutputText = openAIResponse.output;
+    const rawOpenAIOutputArray = openAIResponse.output;
     // @ts-ignore
-    const toolErrors = openAIResponse.tool_errors; 
+    const topLevelToolErrors = openAIResponse.tool_errors; 
 
-    console.log("[API MCPv5 POST V2_LOGGING] Raw outputText from OpenAI:", rawOutputText);
-    console.log("[API MCPv5 POST V2_LOGGING] tool_errors from OpenAI:", JSON.stringify(toolErrors, null, 2)); 
+    console.log("[API MCPv5 POST V2_LOGGING] Raw OpenAI Output Array:", JSON.stringify(rawOpenAIOutputArray, null, 2));
+    console.log("[API MCPv5 POST V2_LOGGING] Top-level tool_errors from OpenAI:", JSON.stringify(topLevelToolErrors, null, 2)); 
 
-    const finalAssistantText = (typeof rawOutputText === 'string') ? rawOutputText : "No text output received from assistant.";
+    let extractedAssistantMessage: string | null = null;
+    const extractedToolErrors: any[] = [];
+
+    if (Array.isArray(rawOpenAIOutputArray)) {
+      for (const item of rawOpenAIOutputArray) {
+        if (item.type === "message" && item.role === "assistant" && item.content && Array.isArray(item.content)) {
+          for (const contentItem of item.content) {
+            // @ts-ignore
+            if (contentItem.type === "output_text" && typeof contentItem.text === 'string') {
+              extractedAssistantMessage = (extractedAssistantMessage || "") + contentItem.text;
+            // @ts-ignore
+            } else if (contentItem.type === "text" && typeof contentItem.text === 'string') { // Fallback
+              extractedAssistantMessage = (extractedAssistantMessage || "") + contentItem.text;
+            }
+          }
+        } else if (item.type === "mcp_call" && item.error) {
+          extractedToolErrors.push({
+            tool_name: item.name, // 'name' might not exist directly on mcp_call, 'server_label' is more likely
+            server_label: item.server_label,
+            error: item.error,
+            arguments: item.arguments 
+          });
+        }
+      }
+    }
+
+    // @ts-ignore
+    if (!extractedAssistantMessage && typeof openAIResponse.output_text === 'string' && openAIResponse.output_text.trim() !== '') {
+    // @ts-ignore
+      extractedAssistantMessage = openAIResponse.output_text;
+      console.log("[API MCPv5 POST V2_LOGGING] Used top-level output_text as fallback.");
+    }
     
-    console.log(`[API MCPv5 POST V2_LOGGING] Final assistant output for client: "${finalAssistantText.substring(0,100)}..."`);
+    const finalAssistantText = extractedAssistantMessage || "No text output received from assistant.";
+    const finalToolErrors = (extractedToolErrors.length > 0) ? extractedToolErrors : (topLevelToolErrors || null);
     
-    if (toolErrors && (!Array.isArray(toolErrors) || toolErrors.length > 0)) { 
-      console.warn("[API MCPv5 POST V2_LOGGING] Tool errors reported by OpenAI:", toolErrors);
+    console.log(`[API MCPv5 POST V2_LOGGING] Extracted final assistant text: "${finalAssistantText.substring(0,100)}..."`);
+    if (finalToolErrors && (!Array.isArray(finalToolErrors) || finalToolErrors.length > 0)) {
+        console.warn("[API MCPv5 POST V2_LOGGING] Tool errors for client:", JSON.stringify(finalToolErrors, null, 2));
     }
     
     return NextResponse.json({ 
       success: true, 
-      response: finalAssistantText, 
-      tool_errors: toolErrors || null 
+      response: finalAssistantText,
+      tool_errors: finalToolErrors 
     });
 
   } catch (error: any) {
