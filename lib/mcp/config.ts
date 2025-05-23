@@ -14,6 +14,8 @@ export interface McpServerConfig {
 }
 
 export function getMcpServersConfiguration(): McpServerConfig[] {
+  console.log("Raw MCP_SERVERS_CONFIG from env:", process.env.MCP_SERVERS_CONFIG); // <-- ADD THIS LINE
+
   const configJson = process.env.MCP_SERVERS_CONFIG;
 
   if (!configJson) {

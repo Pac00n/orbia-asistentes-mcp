@@ -132,18 +132,20 @@ export async function POST(request: Request) {
     console.log("[API MCPv5 POST / OpenAI Responses API] openai.responses.create() call completed.");
 
     // @ts-ignore
-    const outputText = openAIResponse.output || "No text output received from assistant.";
+    const rawOutputText = openAIResponse.output;
     // @ts-ignore
     const toolErrors = openAIResponse.tool_errors || null;
+
+    const finalAssistantText = (typeof rawOutputText === 'string') ? rawOutputText : "No text output received from assistant.";
     
-    console.log(`[API MCPv5 POST / OpenAI Responses API] Final assistant output: "${outputText.substring(0,100)}..."`);
+    console.log(`[API MCPv5 POST / OpenAI Responses API] Final assistant output: "${finalAssistantText.substring(0,100)}..."`);
     if (toolErrors) {
       console.warn(`[API MCPv5 POST / OpenAI Responses API] Tool errors reported:`, toolErrors);
     }
     
     return NextResponse.json({ 
       success: true, 
-      response: outputText,
+      response: finalAssistantText, // Use the guarded variable
       tool_errors: toolErrors 
     });
 
