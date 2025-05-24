@@ -169,8 +169,7 @@ export async function POST(request: Request) {
 
         return toolDefinition;
       })
-      .filter(tool => tool !== null) // Ensure .filter is part of the continuous expression
-      as OpenAI.Beta.Responses.Tool.MCP[]; // CORRECT PLACEMENT
+      .filter(tool => tool !== null) as OpenAI.Beta.Responses.Tool.MCP[]; // CORRECT PLACEMENT
 
     console.log("[API MCPv5 POST / OpenAI Responses API] Calling openai.responses.create(). Tools being sent:", JSON.stringify(mappedMcpTools, null, 2));
     // @ts-ignore - Assuming openai.responses.create is available, might need type update for openai package
