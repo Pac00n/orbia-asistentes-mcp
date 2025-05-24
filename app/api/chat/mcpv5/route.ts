@@ -104,54 +104,66 @@ export async function POST(request: Request) {
       .map(mcpServer => {
         const headers: { [key: string]: string } = {};
         let apiKey: string | undefined;
+        let excludeTool = false;
 
+        // 1. Handle api_key_env_var and auth_type (Primary Mechanism)
         if (mcpServer.api_key_env_var) {
           apiKey = process.env[mcpServer.api_key_env_var];
           if (!apiKey) {
-            console.warn(`[API MCPv5 POST V2_LOGGING] API key from env var '${mcpServer.api_key_env_var}' not found for MCP server '${mcpServer.id}'. This tool will be excluded if an API key is strictly required by its auth_type.`);
-            // If auth_type implies a key is needed, we should exclude the tool.
             if (mcpServer.auth_type === 'bearer' || mcpServer.auth_type === 'x-api-key') {
-                return null; // Exclude this tool
+              console.warn(`[API MCPv5 POST V2_LOGGING] API key from env var '${mcpServer.api_key_env_var}' not found for MCP server '${mcpServer.id}' which requires it. This tool will be excluded.`);
+              excludeTool = true;
+            } else {
+              console.warn(`[API MCPv5 POST V2_LOGGING] API key from env var '${mcpServer.api_key_env_var}' not found for MCP server '${mcpServer.id}'. It might not be strictly required by auth_type '${mcpServer.auth_type}'.`);
             }
           } else {
-            // Construct headers based on auth_type and apiKey
             if (mcpServer.auth_type === 'bearer') {
               headers['Authorization'] = `Bearer ${apiKey}`;
             } else if (mcpServer.auth_type === 'x-api-key') {
               headers['x-api-key'] = apiKey;
             } else if (mcpServer.auth_type) {
-                console.warn(`[API MCPv5 POST V2_LOGGING] Unrecognized auth_type '${mcpServer.auth_type}' for MCP server '${mcpServer.id}' with a provided api_key_env_var. No specific authorization header will be added based on this auth_type.`);
+              console.warn(`[API MCPv5 POST V2_LOGGING] API key provided for server '${mcpServer.id}' via '${mcpServer.api_key_env_var}' but auth_type is '${mcpServer.auth_type}'. No specific header added based on this auth_type.`);
+            } else {
+                 console.warn(`[API MCPv5 POST V2_LOGGING] API key provided for server '${mcpServer.id}' via '${mcpServer.api_key_env_var}' but no 'auth_type' was specified. Assuming 'x-api-key'.`);
+                 headers['x-api-key'] = apiKey; // Default assumption if auth_type is missing but key is present
             }
-            // If auth_type is not set but api_key_env_var was, it's ambiguous how to use the key.
-            // For now, we assume auth_type will guide header creation if an API key is involved.
           }
-        } else if (mcpServer.apiKey) { // Fallback to legacy direct apiKey (less secure, from old config)
-            console.warn(`[API MCPv5 POST V2_LOGGING] Using legacy 'apiKey' field (direct key) for MCP server '${mcpServer.id}'. Please migrate to 'auth_type' and 'api_key_env_var'.`);
-            headers['X-API-Key'] = mcpServer.apiKey; // Generic header for legacy direct key
-        } else if (mcpServer.auth && mcpServer.auth.token) { // Fallback to legacy 'auth' object
-            console.warn(`[API MCPv5 POST V2_LOGGING] Using legacy 'auth' object for MCP server '${mcpServer.id}'. Please migrate to 'auth_type' and 'api_key_env_var'.`);
-            if (mcpServer.auth.type === 'bearer') { // Assuming 'auth.type' could be 'bearer'
+        } 
+        
+        // 2. Fallback to Legacy apiKey field (if primary mechanism didn't set a key AND tool is not yet excluded)
+        if (!excludeTool && !apiKey && mcpServer.apiKey) {
+            console.warn(`[API MCPv5 POST V2_LOGGING] Using legacy 'apiKey' field for MCP server '${mcpServer.id}'. Consider migrating to 'auth_type' and 'api_key_env_var'.`);
+            headers['X-API-Key'] = mcpServer.apiKey; // Generic header
+        } 
+        
+        // 3. Fallback to Legacy auth object (if primary and legacy apiKey didn't set a key AND tool is not yet excluded)
+        else if (!excludeTool && !apiKey && mcpServer.auth && mcpServer.auth.token) {
+            console.warn(`[API MCPv5 POST V2_LOGGING] Using legacy 'auth' object for MCP server '${mcpServer.id}'. Consider migrating to 'auth_type' and 'api_key_env_var'.`);
+            if (mcpServer.auth.type === 'bearer') {
                 headers['Authorization'] = `Bearer ${mcpServer.auth.token}`;
-            } else if (mcpServer.auth.type === 'header' && mcpServer.auth.header) { // Assuming 'auth.type' could be 'header' for custom
+            } else if (mcpServer.auth.type === 'header' && mcpServer.auth.header) {
                 headers[mcpServer.auth.header] = mcpServer.auth.token;
             } else {
-                headers['X-API-Key'] = mcpServer.auth.token; // Fallback for unknown legacy auth object structure
+                headers['X-API-Key'] = mcpServer.auth.token; // Generic fallback for legacy auth token
             }
         }
-        // If no api_key_env_var, no legacy apiKey, and no legacy auth object, it's an open tool or misconfigured for auth.
 
-        const toolDefinition = { // Explicitly type or cast later if needed due to @ts-ignore for require_approval
+        if (excludeTool) {
+          return null;
+        }
+
+        // 4. Final Tool Definition
+        const toolDefinition: OpenAI.Beta.Responses.Tool.MCP = {
           type: "mcp",
           server_label: mcpServer.id,
-          server_url: mcpServer.url,
-          // Only include headers if it's not empty
-          headers: Object.keys(headers).length > 0 ? headers : undefined,
-          // @ts-ignore - allow require_approval if not in base type
-          require_approval: "never"
+          server_url: mcpServer.url, // Base URL from config
+          headers: Object.keys(headers).length > 0 ? headers : undefined, // CRITICAL
+          // @ts-ignore if require_approval causes type issues
+          require_approval: "never" 
         };
         return toolDefinition;
       })
-      .filter(tool => tool !== null) as OpenAI.Beta.Responses.Tool.MCP[]; // Filter out excluded tools
+      .filter(tool => tool !== null) as OpenAI.Beta.Responses.Tool.MCP[]; // Remove tools that were excluded
 
     console.log("[API MCPv5 POST / OpenAI Responses API] Calling openai.responses.create(). Tools being sent:", JSON.stringify(mappedMcpTools, null, 2));
     // @ts-ignore - Assuming openai.responses.create is available, might need type update for openai package
