@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     let mcpConfigsToUse: McpServerConfig[] = [];
 
     // Process and filter MCP configurations
-    let mcpConfigsToUse: McpServerConfig[] = allMcpConfigs
+    mcpConfigsToUse = allMcpConfigs // Removed `let` and type annotation here
       .map(serverConfig => {
         // This initial map is just to prepare for potential filtering based on api_key_env_var
         // No actual transformation of serverConfig happens here, that's done in mappedMcpTools
