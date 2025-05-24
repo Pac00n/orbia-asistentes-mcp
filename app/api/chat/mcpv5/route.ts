@@ -103,49 +103,74 @@ export async function POST(request: Request) {
     // let mcpConfigsToUse: McpServerConfig[] = ... (this is already populated based on getMcpServersConfiguration and forced_tool_id)
 
     const mappedMcpTools = mcpConfigsToUse
-      .map(mcpServer => { // mcpServer is of type McpServerConfig
+      .map(mcpServer => {
         const toolDefinition: {
           type: "mcp";
           server_label: string;
           server_url: string;
-          require_approval: "never";
+          require_approval: "never"; 
           headers?: { [key: string]: string };
         } = {
           type: "mcp",
           server_label: mcpServer.id,
-          server_url: mcpServer.url, // Ensure this is the base URL for Zapier
+          server_url: mcpServer.url,
           // @ts-ignore - require_approval might not be in the base OpenAI.Beta.Responses.Tool.MCP type
           require_approval: "never",
         };
 
-        if (mcpServer.auth_type === "bearer" && mcpServer.api_key_env_var) {
-          const apiKey = process.env[mcpServer.api_key_env_var];
-          if (apiKey) {
-            toolDefinition.headers = { Authorization: `Bearer ${apiKey}` };
-          } else {
-            console.warn(`[API MCPv5 POST V2_LOGGING] API key environment variable '${mcpServer.api_key_env_var}' for '${mcpServer.id}' not found. Tool will be sent without auth headers.`);
-            // Depending on policy, we might want to return null here and filter,
-            // but the user's snippet implied sending the tool without headers if key is missing,
-            // relying on the MCP server to reject. For Zapier, this will fail, which is informative.
-          }
-        } else if (mcpServer.auth_type === 'x-api-key' && mcpServer.api_key_env_var) { // Keep x-api-key for Exa if user adds it back
-            const apiKey = process.env[mcpServer.api_key_env_var];
-            if (apiKey) {
-                toolDefinition.headers = { 'x-api-key': apiKey };
+        // Logic to construct headers for toolDefinition.headers
+        // This should be the robust logic from previous steps that handles api_key_env_var, auth_type, and fallbacks
+        const headers: { [key: string]: string } = {};
+        let apiKey: string | undefined;
+        let excludeTool = false;
+
+        if (mcpServer.api_key_env_var) {
+          apiKey = process.env[mcpServer.api_key_env_var];
+          if (!apiKey) {
+            if (mcpServer.auth_type === 'bearer' || mcpServer.auth_type === 'x-api-key') {
+              console.warn(`[API MCPv5 POST V2_LOGGING] API key from env var '${mcpServer.api_key_env_var}' not found for MCP server '${mcpServer.id}' which requires it. This tool will be excluded.`);
+              excludeTool = true;
             } else {
-                console.warn(`[API MCPv5 POST V2_LOGGING] API key environment variable '${mcpServer.api_key_env_var}' for '${mcpServer.id}' not found. Tool will be sent without auth headers.`);
+              console.warn(`[API MCPv5 POST V2_LOGGING] API key from env var '${mcpServer.api_key_env_var}' not found for MCP server '${mcpServer.id}'. It might not be strictly required by auth_type '${mcpServer.auth_type}'.`);
+            }
+          } else {
+            if (mcpServer.auth_type === 'bearer') {
+              headers['Authorization'] = `Bearer ${apiKey}`;
+            } else if (mcpServer.auth_type === 'x-api-key') {
+              headers['x-api-key'] = apiKey;
+            } else if (mcpServer.auth_type) {
+              console.warn(`[API MCPv5 POST V2_LOGGING] API key provided for server '${mcpServer.id}' via '${mcpServer.api_key_env_var}' but auth_type is '${mcpServer.auth_type}'. No specific header added based on this auth_type.`);
+            } else {
+                 console.warn(`[API MCPv5 POST V2_LOGGING] API key provided for server '${mcpServer.id}' via '${mcpServer.api_key_env_var}' but no 'auth_type' was specified. Assuming 'x-api-key'.`);
+                 headers['x-api-key'] = apiKey; 
+            }
+          }
+        } else if (mcpServer.apiKey) { 
+            console.warn(`[API MCPv5 POST V2_LOGGING] Using legacy 'apiKey' field for MCP server '${mcpServer.id}'. Consider migrating to 'auth_type' and 'api_key_env_var'.`);
+            headers['X-API-Key'] = mcpServer.apiKey; 
+        } else if (mcpServer.auth && mcpServer.auth.token) { 
+            console.warn(`[API MCPv5 POST V2_LOGGING] Using legacy 'auth' object for MCP server '${mcpServer.id}'. Consider migrating to 'auth_type' and 'api_key_env_var'.`);
+            if (mcpServer.auth.type === 'bearer') {
+                headers['Authorization'] = `Bearer ${mcpServer.auth.token}`;
+            } else if (mcpServer.auth.type === 'header' && mcpServer.auth.header) {
+                headers[mcpServer.auth.header] = mcpServer.auth.token;
+            } else {
+                headers['X-API-Key'] = mcpServer.auth.token; 
             }
         }
-        // NOTE: This simplified logic directly implements the user's last snippet's pattern.
-        // It prioritizes auth_type: 'bearer' and 'x-api-key' if api_key_env_var is set.
-        // It does NOT include the more complex legacy fallbacks (mcpServer.apiKey, mcpServer.auth object)
-        // that were in my previous, more comprehensive subtask attempt. This is to strictly follow user's latest guide.
+
+        if (excludeTool) {
+          return null; // This tool will be filtered out
+        }
+        
+        if (Object.keys(headers).length > 0) {
+          toolDefinition.headers = headers;
+        }
 
         return toolDefinition;
       })
-      // .filter(tool => tool !== null); // No longer explicitly returning null in map for this version
-      // Ensure the final type matches OpenAI.Beta.Responses.Tool.MCP[]
-      as OpenAI.Beta.Responses.Tool.MCP[];
+      .filter(tool => tool !== null) // Ensure .filter is part of the continuous expression
+      as OpenAI.Beta.Responses.Tool.MCP[]; // CORRECT PLACEMENT
 
     console.log("[API MCPv5 POST / OpenAI Responses API] Calling openai.responses.create(). Tools being sent:", JSON.stringify(mappedMcpTools, null, 2));
     // @ts-ignore - Assuming openai.responses.create is available, might need type update for openai package
