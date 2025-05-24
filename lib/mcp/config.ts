@@ -6,14 +6,18 @@ export interface McpServerConfig {
   name?: string;
   apiKey?: string; // Mantenido para compatibilidad con versiones anteriores
   auth?: {
-    type: 'bearer' | 'header';
-    token?: string;     // Para autenticación Bearer
-    header?: string;    // Para autenticación por header personalizado
-    value?: string;     // Para autenticación por header personalizado
+    type: 'bearer' | 'header'; // Considerar si este 'header' se mapea a 'x-api-key' o es distinto
+    token?: string;     // Para autenticación Bearer o valor de api_key_env_var si auth_type es x-api-key
+    header?: string;    // Para autenticación por header personalizado (nombre del header)
+    value?: string;     // Para autenticación por header personalizado (valor del header, si no usa token)
   };
+  auth_type?: 'bearer' | 'x-api-key' | string; // Nuevo campo para tipo de autenticación explícito
+  api_key_env_var?: string; // Nuevo campo para el nombre de la variable de entorno que contiene la API key
 }
 
 export function getMcpServersConfiguration(): McpServerConfig[] {
+  console.log("Raw MCP_SERVERS_CONFIG from env:", process.env.MCP_SERVERS_CONFIG); // <-- ADD THIS LINE
+
   const configJson = process.env.MCP_SERVERS_CONFIG;
 
   if (!configJson) {
