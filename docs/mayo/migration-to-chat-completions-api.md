@@ -11,43 +11,52 @@ The initial goal of migrating MCP assistants evolved based on user feedback and 
 
 This document details the final changes for the "MCP v5 - mcp-test-assistant" migration.
 
-## 2. Core Changes: `/api/chat/mcpv5/route.ts`
+## 2. Core Changes
 
-The API route `/api/chat/mcpv5/route.ts`, which serves the "MCP v5 - mcp-test-assistant", was refactored to use `openai.responses.create()`:
+### 2.1. API Endpoint: `/api/chat/mcpv5/route.ts` (for "MCP v5 - mcp-test-assistant")
 
-*   **`McpClient` No Longer Used for Execution**: The `McpClient` is no longer used in this file for discovering or executing tool calls. OpenAI now manages these interactions.
-*   **Dependency on `lib/mcp/config.ts`**: The route still uses `getMcpServersConfiguration()` from `lib/mcp/config.ts` to fetch the list of MCP servers defined in the `MCP_SERVERS_CONFIG` environment variable.
+This API route, serving the "MCP v5 - mcp-test-assistant", was refactored to use `openai.responses.create()` and a flexible system for defining MCP tools.
 
-*   **GET Handler (Tool Listing):**
-    *   Fetches MCP server configurations via `getMcpServersConfiguration()`.
-    *   Transforms this list into a simplified format suitable for UI display (e.g., `[{ id: server.id, name: server.name || server.id, description: ... }]`). This is because the client no longer needs detailed function signatures, only a list of available MCP capabilities.
+*   **Dynamic Tool Definition from `MCP_SERVERS_CONFIG`**:
+    *   The route reads its tool configurations from the `MCP_SERVERS_CONFIG` environment variable.
+    *   To support various authentication mechanisms (e.g., Bearer tokens for Zapier, API keys in headers for Exa), entries in `MCP_SERVERS_CONFIG` should now use these optional fields:
+        *   `"auth_type"`: Specifies the authentication method (e.g., `"bearer"`, `"x-api-key"`).
+        *   `"api_key_env_var"`: Specifies the name of the environment variable that holds the actual API key (e.g., `"ZAPIER_MCP_API_KEY"`).
+    *   The backend code in `/api/chat/mcpv5/route.ts` uses these fields to dynamically construct the `headers` object for each tool passed to `openai.responses.create()`.
+    *   If an `api_key_env_var` is specified but the environment variable is not set, the tool is excluded, and a warning is logged.
+    *   The `server_url` should be the base URL of the MCP server (e.g., `https://mcp.zapier.com/api/mcp/mcp`).
+    *   `require_approval: "never"` is set for all tools to enable auto-execution by OpenAI.
 
+*   **Example: Configuring Zapier/Tavily Search in `MCP_SERVERS_CONFIG`**:
+    To use Tavily Search via Zapier (as per user's latest guide), the `MCP_SERVERS_CONFIG` entry would look like:
+    ```json
+    {
+      "id": "zapier-tavily-search", // Unique server_label for OpenAI
+      "name": "Tavily Search via Zapier",
+      "url": "https://mcp.zapier.com/api/mcp/mcp", // Or from ZAPIER_MCP_URL env var
+      "auth_type": "bearer",
+      "api_key_env_var": "ZAPIER_MCP_API_KEY"
+    }
+    ```
+    And the following environment variables must be set in Vercel:
+    *   `ZAPIER_MCP_API_KEY`: Your Zapier NLA API key.
+    *   `ZAPIER_MCP_URL`: (Optional, if you want to set the URL via env var too) `https://mcp.zapier.com/api/mcp/mcp`. The backend can be adapted to read this if `MCP_SERVERS_CONFIG.url` points to it. For now, it assumes the direct URL is in `MCP_SERVERS_CONFIG`.
+
+*   **GET Handler (Tool Listing):** Continues to list tools based on `MCP_SERVERS_CONFIG` for UI display.
 *   **POST Handler (Chat Processing):**
-    *   Uses `openai.responses.create()` to process user messages and interact with MCP tools.
-    *   **Input Construction**: The user's message, along with system instructions from `lib/assistants.ts` (`assistantConfig.instructions`), is passed as the `input` to `responses.create()`.
-    *   **Tool Definition for `responses.create()`**:
-        *   The `tools` array is constructed by mapping entries from `MCP_SERVERS_CONFIG`. Each tool is defined with:
-            *   `type: "mcp"`
-            *   `server_label: server.id` (a unique identifier for the MCP server)
-            *   `server_url: server.url` (For Exa, this URL is processed at runtime, see "Exa Web Search Integration" below).
-            *   `headers`: Dynamically constructed based on the `auth` (bearer token, custom header) or legacy `apiKey` fields in `MCP_SERVERS_CONFIG` for each server.
-            *   `require_approval: "never"`: This field is added (with `@ts-ignore` in the code as it might not be in the current SDK's typings) to instruct OpenAI to attempt to execute the tool directly without an intermediate approval step, aiming for a more streamlined interaction.
-        *   If `forced_tool_id` is provided in the request (matching a `server.id`), the `tools` array passed to `responses.create()` is filtered to only include that specific MCP server, effectively forcing its selection.
-    *   **API Call**: `await openai.responses.create({ model: ..., input: ..., tools: ... })`. The call is non-streaming.
-    *   **Response Handling**: The final output from the assistant is taken from `openAIResponse.output`. Any errors reported by MCP servers during OpenAI's attempt to call them are expected in `openAIResponse.tool_errors[]` and are returned to the client.
-    #### Exa Web Search Integration:
-    *   The route now supports integration with "Exa Web Search" as an MCP tool.
-    *   **Configuration via `MCP_SERVERS_CONFIG`**: To enable Exa, an entry should exist in `MCP_SERVERS_CONFIG` with `id: "exa"`. Its `url` field must contain the placeholder `${EXA_API_KEY}`. For example:
-        ```json
-        {
-          "id": "exa",
-          "url": "https://mcp.exa.ai/mcp?exaApiKey=${EXA_API_KEY}",
-          "name": "Exa Web Search"
-        }
-        ```
-    *   **Environment Variable**: The `EXA_API_KEY` environment variable must be set in the Vercel environment.
-    *   **Runtime API Key Injection**: The backend replaces the `${EXA_API_KEY}` placeholder in the URL with the actual environment variable value before passing the tool definition to `openai.responses.create()`.
-    *   If the `EXA_API_KEY` is not set, the Exa tool is automatically excluded, and a warning is logged.
+    *   Uses `openai.responses.create()` with the dynamically configured MCP tools.
+    *   Parses the `openAIResponse.output` array to find the final assistant message (from `type: "message"`) and to collect any tool execution errors (from `type: "mcp_call"` objects).
+
+*   **(Previous Exa Configuration Note):** While Exa was used for debugging, if it's still needed, it would be configured similarly:
+    ```json
+    {
+      "id": "exa-search",
+      "name": "Exa Web Search",
+      "url": "https://mcp.exa.ai/mcp",
+      "auth_type": "x-api-key", // Assuming Exa uses x-api-key header
+      "api_key_env_var": "EXA_API_KEY"
+    }
+    ```
 
 ## 3. Assistant Configuration: `lib/assistants.ts`
 
@@ -57,28 +66,28 @@ The API route `/api/chat/mcpv5/route.ts`, which serves the "MCP v5 - mcp-test-as
 ## 4. Tool Calling Functionality (via OpenAI Responses API)
 
 *   For "MCP v5 - mcp-test-assistant", OpenAI now directly calls the MCP servers specified in the `tools` array.
-*   The backend (`/api/chat/mcpv5/route.ts`) no longer makes direct HTTP requests to MCP servers. It only declares them to the `responses.create()` API. This includes dynamically configuring the Exa tool's URL with its API key at runtime and setting `require_approval: "never"` for all MCP tools.
+*   The backend (`/api/chat/mcpv5/route.ts`) no longer makes direct HTTP requests to MCP servers. It only declares them to the `responses.create()` API. This includes dynamically configuring tool headers based on `MCP_SERVERS_CONFIG` (using `auth_type` and `api_key_env_var`) and setting `require_approval: "never"` for all MCP tools.
 *   This aligns with the user's provided guide, aiming to reduce backend complexity and leverage OpenAI's infrastructure for network interactions with MCPs.
 
-## 5. Testing and Verification (Revised)
+## 5. Testing and Verification (Revised for Zapier/Tavily)
 
 Thorough testing is required for:
 
-*   **"MCP v5 - mcp-test-assistant" (via its card and `/api/chat/mcpv5/route.ts`):**
-    *   Confirm that it uses the `openai.responses.create()` API. (This might involve checking Vercel logs for OpenAI API calls if `OPENAI_LOG=debug` can be enabled, or observing behavior).
-    *   Verify successful invocation of external tools (e.g., "fs-demo", "git", "fetch") via OpenAI. Check that `demo.mcp.tools` DNS issue (if still present) is now reported in `tool_errors` by the Responses API.
-    *   Test the "Force Tool" functionality.
-*   **Tool Execution Flow (for "MCP v5 - mcp-test-assistant"):**
-    *   Verify that with `require_approval: "never"`, OpenAI directly executes the chosen MCP tool (e.g., Exa) and the backend receives a final response or a `tool_error`, rather than an `mcp_approval_request` object in the `output` array.
-*   **Exa Web Search Integration (for "MCP v5 - mcp-test-assistant"):**
-    *   Ensure the `EXA_API_KEY` environment variable is correctly set in Vercel.
-    *   Add or verify the "exa" tool configuration in `MCP_SERVERS_CONFIG` with the URL placeholder `${EXA_API_KEY}`.
-    *   Send prompts that should trigger web searches (e.g., "Busca artículos de los últimos 7 días sobre Quantum Error Correction...").
-    *   Verify that Exa is called (this might require checking Vercel logs for outgoing requests from OpenAI if `OPENAI_LOG=debug` is enabled, or observing the nature of the search results).
-    *   Confirm that search results from Exa are returned and used by the assistant.
-    *   Test behavior if `EXA_API_KEY` is missing (Exa tool should be skipped).
-*   **"Asistente de Señalización" (via its card and `/api/chat/route.ts`):**
-    *   Re-confirm it is functioning correctly using the reverted Assistants API.
-*   **MCP Server Configuration:** Ensure MCP servers listed in `MCP_SERVERS_CONFIG` are publicly accessible via HTTPS with valid TLS certificates and correct auth headers, as required by the OpenAI Responses API for remote MCPs.
+*   **"MCP v5 - mcp-test-assistant" (with Zapier/Tavily):**
+    *   **Environment Variables:**
+        *   Ensure `MCP_SERVERS_CONFIG` in Vercel is updated to primarily (or solely) list the Zapier/Tavily tool, configured with `auth_type: "bearer"` and `api_key_env_var: "ZAPIER_MCP_API_KEY"`.
+        *   Ensure `ZAPIER_MCP_API_KEY` is correctly set.
+        *   Ensure `ZAPIER_MCP_URL` is set if your `MCP_SERVERS_CONFIG` entry for Zapier's `url` field references this environment variable (otherwise, ensure the direct URL is in `MCP_SERVERS_CONFIG`).
+    *   **Functionality:**
+        *   Send prompts that should trigger Tavily web search (e.g., "Dame un resumen de las 3 noticias más recientes sobre Artemis II.").
+        *   Verify that the assistant provides search results from Tavily.
+        *   Check Vercel logs (`V2_LOGGING` messages) to confirm:
+            *   The Zapier tool is correctly prepared with the Bearer token in headers.
+            *   The `Full OpenAI Response object` shows successful `mcp_call` for `server_label: "zapier-tavily-search"` (or similar) without errors.
+            *   The final assistant message is correctly extracted.
+    *   Test the "Force Tool" functionality for Zapier/Tavily.
+*   **"Asistente de Señalización"**: Re-confirm it remains functional with the reverted Assistants API.
+*   **Error Handling**:
+    *   Test with an incorrect `ZAPIER_MCP_API_KEY` to see if Zapier/OpenAI reports an auth error (e.g., 401/403 in an `mcp_call` error object) and if the backend surfaces this in the `tool_errors` part of its JSON response to the client.
 
 This approach leverages the latest OpenAI capabilities for a more robust and managed integration of remote MCP tools.

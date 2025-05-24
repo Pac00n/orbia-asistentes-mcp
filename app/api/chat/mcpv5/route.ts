@@ -72,69 +72,84 @@ export async function POST(request: Request) {
     let mcpConfigsToUse: McpServerConfig[] = [];
 
     // Process and filter MCP configurations
-    // The duplicate declarations of allMcpConfigs and mcpConfigsToUse were here and are now removed.
-
-    for (const server of allMcpConfigs) {
-      if (server.id === "exa") {
-        const exaApiKey = process.env.EXA_API_KEY;
-        if (!exaApiKey) {
-          console.warn("[API MCPv5 POST / OpenAI Responses API] EXA_API_KEY not found for 'exa' tool. Excluding it.");
-          continue; // Skip this server if API key is missing
+    let mcpConfigsToUse: McpServerConfig[] = allMcpConfigs
+      .map(serverConfig => {
+        // This initial map is just to prepare for potential filtering based on api_key_env_var
+        // No actual transformation of serverConfig happens here, that's done in mappedMcpTools
+        if (serverConfig.api_key_env_var && !process.env[serverConfig.api_key_env_var]) {
+          console.warn(`[API MCPv5 POST V2_LOGGING] API key environment variable '${serverConfig.api_key_env_var}' not found for MCP server '${serverConfig.id}'. This tool will be excluded if selected.`);
+          // We don't return null here yet, because it might not be selected.
+          // The actual exclusion will happen in the mappedMcpTools step or if forced.
         }
-        // For Exa, the URL from MCP_SERVERS_CONFIG is expected to be the base URL.
-        // The API key will be added to headers, not substituted in the URL here.
-      }
-      mcpConfigsToUse.push(server); // Add server if it's not Exa, or if it's Exa and key is present (key checked during mapping)
-    }
+        return serverConfig;
+      });
 
     // Apply forced_tool_id filtering
     if (forced_tool_id && typeof forced_tool_id === 'string' && forced_tool_id.trim() !== "") {
       console.log(`[API MCPv5 POST / OpenAI Responses API] Filtering MCP servers to force tool: ${forced_tool_id}`);
-      // Check if the forced tool is 'exa' and if its API key is missing
-      if (forced_tool_id === "exa" && !process.env.EXA_API_KEY) {
-         console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool 'exa' selected, but EXA_API_KEY is missing.`);
-         return NextResponse.json({ success: false, error: `Herramienta forzada ${forced_tool_id} no disponible (falta API key).` }, { status: 400 });
+      const forcedConfig = mcpConfigsToUse.find(s => s.id === forced_tool_id);
+      if (forcedConfig?.api_key_env_var && !process.env[forcedConfig.api_key_env_var]) {
+         console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool '${forced_tool_id}' selected, but its API key environment variable '${forcedConfig.api_key_env_var}' is missing.`);
+         return NextResponse.json({ success: false, error: `Herramienta forzada ${forced_tool_id} no disponible (falta API key env var).` }, { status: 400 });
       }
       mcpConfigsToUse = mcpConfigsToUse.filter(server => server.id === forced_tool_id);
-      if (mcpConfigsToUse.length === 0) {
+      if (mcpConfigsToUse.length === 0) { // Should be caught by above if API key for forced tool is missing
         console.error(`[API MCPv5 POST / OpenAI Responses API] Forced tool ID ${forced_tool_id} not found after initial processing.`);
         return NextResponse.json({ success: false, error: `Herramienta forzada ${forced_tool_id} no disponible.` }, { status: 400 });
       }
     }
     console.log(`[API MCPv5 POST / OpenAI Responses API] Using ${mcpConfigsToUse.length} MCP server(s) for tools.`);
 
-    const mappedMcpTools: OpenAI.Beta.Responses.Tool.MCP[] = mcpConfigsToUse.map(mcpServer => {
-      const headers: { [key: string]: string } = {};
-      
-      if (mcpServer.id === "exa") {
-        const exaApiKey = process.env.EXA_API_KEY;
-        if (exaApiKey) {
-          headers['x-api-key'] = exaApiKey; // Correct header for Exa
-        } 
-        // If exaApiKey is missing here, it should have been filtered out already if 'exa' was not forced.
-        // If 'exa' was forced and key is missing, the earlier check handles it.
-      } else {
-        // Handle auth for other servers
-        if (mcpServer.auth?.type === 'bearer_token' && mcpServer.auth.token) {
-          headers['Authorization'] = `Bearer ${mcpServer.auth.token}`;
-        } else if (mcpServer.auth?.type === 'custom_header' && mcpServer.auth.header_name && mcpServer.auth.token) {
-          headers[mcpServer.auth.header_name] = mcpServer.auth.token;
+    const mappedMcpTools = mcpConfigsToUse
+      .map(mcpServer => {
+        const headers: { [key: string]: string } = {};
+        let apiKey: string | undefined;
+
+        if (mcpServer.api_key_env_var) {
+          apiKey = process.env[mcpServer.api_key_env_var];
+          if (!apiKey) {
+            // This check is somewhat redundant if the tool wasn't forced, as it wouldn't be used.
+            // If it was forced, the check above should have caught it.
+            // However, it's a good safeguard if a non-forced tool is chosen by OpenAI but its key is missing.
+            console.warn(`[API MCPv5 POST V2_LOGGING] API key environment variable '${mcpServer.api_key_env_var}' not found for MCP server '${mcpServer.id}'. This tool will be excluded if OpenAI attempts to call it.`);
+            return null; // Exclude this tool if its required API key is missing
+          }
+
+          // Construct headers based on auth_type and apiKey
+          if (mcpServer.auth_type === 'bearer') {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+          } else if (mcpServer.auth_type === 'x-api-key') {
+            headers['x-api-key'] = apiKey;
+          } else if (mcpServer.auth_type) {
+              console.warn(`[API MCPv5 POST V2_LOGGING] Unrecognized auth_type '${mcpServer.auth_type}' for MCP server '${mcpServer.id}' when api_key_env_var is present. No authorization header will be added based on this auth_type.`);
+          } else {
+            // If api_key_env_var is present but no auth_type, assume 'x-api-key' as a sensible default or log a warning.
+            // For now, let's assume it must be explicit if auth_type is desired with api_key_env_var.
+            console.warn(`[API MCPv5 POST V2_LOGGING] MCP server '${mcpServer.id}' has 'api_key_env_var' but no explicit 'auth_type'. API key will not be automatically added to headers without an auth_type like 'bearer' or 'x-api-key'.`);
+          }
+        } else if (mcpServer.apiKey) { // Fallback if only legacy apiKey is present
+            console.warn(`[API MCPv5 POST V2_LOGGING] Using legacy 'apiKey' field for MCP server '${mcpServer.id}'. Please migrate to 'auth_type' and 'api_key_env_var'.`);
+            headers['X-API-Key'] = mcpServer.apiKey; // Generic header for legacy
+        } else if (mcpServer.auth) { // Fallback if only legacy auth object is present
+              console.warn(`[API MCPv5 POST V2_LOGGING] Using legacy 'auth' object for MCP server '${mcpServer.id}'. Please migrate to 'auth_type' and 'api_key_env_var'.`);
+              if (mcpServer.auth.type === 'bearer' && mcpServer.auth.token) { // Original 'auth.type' was 'bearer' or 'header'
+                headers['Authorization'] = `Bearer ${mcpServer.auth.token}`;
+              } else if (mcpServer.auth.type === 'header' && mcpServer.auth.header && mcpServer.auth.token) {
+                headers[mcpServer.auth.header] = mcpServer.auth.token;
+              }
         }
-        if (mcpServer.apiKey) { 
-          headers['X-API-Key'] = mcpServer.apiKey;
-        }
-      }
-      
-      const toolDefinition: OpenAI.Beta.Responses.Tool.MCP = {
-        type: "mcp",
-        server_label: mcpServer.id,
-        server_url: mcpServer.url, // URL is now the base URL for Exa
-        headers: Object.keys(headers).length > 0 ? headers : undefined,
-        // @ts-ignore - Attempt to add auto-approval field
-        require_approval: "never" 
-      };
-      return toolDefinition;
-    });
+        // If no api_key_env_var was specified, and no legacy keys, it's an open tool or misconfigured.
+
+        return {
+          type: "mcp",
+          server_label: mcpServer.id,
+          server_url: mcpServer.url,
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+          // @ts-ignore - allow require_approval if not in base type
+          require_approval: "never"
+        } as OpenAI.Beta.Responses.Tool.MCP;
+      })
+      .filter(tool => tool !== null) as OpenAI.Beta.Responses.Tool.MCP[]; // Remove tools that were excluded
 
     console.log("[API MCPv5 POST / OpenAI Responses API] Calling openai.responses.create(). Tools being sent:", JSON.stringify(mappedMcpTools, null, 2));
     // @ts-ignore - Assuming openai.responses.create is available, might need type update for openai package
